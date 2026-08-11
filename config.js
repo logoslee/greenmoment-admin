@@ -10,6 +10,6 @@ window.SUPABASE_CONFIG = {
 // 구글시트 "지금 내보내기" 버튼용 설정 (index.html)
 // Google Cloud Console에서 OAuth 클라이언트 ID를 만드는 법은 README.md 참고
 window.GOOGLE_CONFIG = {
-  clientId: "YOUR_GOOGLE_OAUTH_CLIENT_ID",
+  clientId: "428981847252-q7jr16uvotbn4metrau4v848oc6f5qg6.apps.googleusercontent.com",
   spreadsheetId: "1Z3Rm15K5nBJkRLbPgnabsvIzB4zvFDIgc3U3xA9KC5Q",
 };
