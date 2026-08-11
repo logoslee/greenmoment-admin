@@ -73,8 +73,28 @@
       <div class="field"><label>판매단가</label><input type="number" id="newSale" placeholder="0"></div>
     </div>
     <div class="field"><label>초기 재고 수량 (선택 — 지금 창고에 있는 만큼)</label><input type="number" id="newStock" placeholder="0"></div>
+    <div class="row2">
+      <div class="field"><label>중량(kg, 선택 — 택배비 구간표 적용용)</label><input type="number" id="newWeight" placeholder="예: 2.5"></div>
+      <div class="field"><label>매입처 (선택)</label><input type="text" id="newVendor" placeholder="예: 팜플로우"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>상품별 택배비 (선택, 비우면 구간표 자동적용)</label><input type="number" id="newShipFee" placeholder="예: 2600"></div>
+      <div class="field"><label>포장비 (선택)</label><input type="number" id="newPackFee" placeholder="예: 700"></div>
+    </div>
+    <div class="field"><label>기타비용 (선택)</label><input type="number" id="newMiscFee" placeholder="0"></div>
     <button class="btn btn-primary" onclick="createItem()">품목 추가</button>
     <div class="msg" id="createMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>🚚 택배비 구간표 (KG 이하 기준, 상품별 택배비가 없을 때 자동 적용)</h2>
+    <div id="tierList"><div class="empty-box">불러오는 중...</div></div>
+    <div class="row2" style="margin-top:10px;">
+      <div class="field"><label>OO kg 이하</label><input type="number" id="newTierWeight" placeholder="예: 3"></div>
+      <div class="field"><label>택배비</label><input type="number" id="newTierFee" placeholder="예: 2600"></div>
+    </div>
+    <button class="btn btn-ghost" style="width:100%;" onclick="addTier()">구간 추가</button>
+    <div class="msg" id="tierMsg"></div>
   </div>
 
   <div class="tabs">
@@ -126,6 +146,43 @@
     renderList();
   }
 
+  let tiers = [];
+
+  async function loadTiers(){
+    const { data, error } = await db.from('shipping_fee_tiers').select('*').eq('active', true).order('max_weight_kg');
+    if(error){ console.error(error); return; }
+    tiers = data || [];
+    renderTierList();
+  }
+
+  function renderTierList(){
+    const el = document.getElementById('tierList');
+    if(!tiers.length){ el.innerHTML = '<div class="empty-box">등록된 구간이 없습니다.</div>'; return; }
+    el.innerHTML = tiers.map(t => `
+      <div class="worker-row" style="display:flex; align-items:center; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--line);">
+        <span style="font-size:13px;">${t.max_weight_kg}kg 이하 — ${fmt(t.fee)}원</span>
+        <button type="button" class="icon-btn" onclick="deleteTier(${t.id})">🗑️</button>
+      </div>`).join('');
+  }
+
+  async function addTier(){
+    const max_weight_kg = Number(document.getElementById('newTierWeight').value);
+    const fee = Number(document.getElementById('newTierFee').value);
+    if(!max_weight_kg || !fee){ setMsg('tierMsg', 'kg와 택배비를 입력하세요', false); return; }
+    const { error } = await db.from('shipping_fee_tiers').upsert({ max_weight_kg, fee }, { onConflict: 'max_weight_kg' });
+    if(error){ setMsg('tierMsg', '추가 실패: ' + error.message, false); return; }
+    setMsg('tierMsg', '추가됨', true);
+    document.getElementById('newTierWeight').value = '';
+    document.getElementById('newTierFee').value = '';
+    loadTiers();
+  }
+
+  async function deleteTier(id){
+    if(!confirm('이 구간을 삭제할까요?')) return;
+    await db.from('shipping_fee_tiers').delete().eq('id', id);
+    loadTiers();
+  }
+
   async function loadAll(){
     const [itemsRes, stockRes] = await Promise.all([
       db.from('items').select('*').order('name'),
@@ -146,7 +203,7 @@
         <div class="item-summary" onclick="toggleEdit(${i.id})">
           <div>
             <div class="item-name">${i.name}${!i.active ? '<span class="badge-inactive">비활성</span>' : ''}</div>
-            <div class="item-sub">매입 ${fmt(i.cost_price)} · 판매 ${fmt(i.sale_price)} · 재고 ${fmt(stockMap[i.id] || 0)}${i.unit}</div>
+            <div class="item-sub">매입 ${fmt(i.cost_price)} · 판매 ${fmt(i.sale_price)} · 재고 ${fmt(stockMap[i.id] || 0)}${i.unit}${i.weight_kg ? ' · ' + i.weight_kg + 'kg' : ''}</div>
           </div>
           <button type="button" class="icon-btn">✏️</button>
         </div>
@@ -160,6 +217,15 @@
             <div class="field"><label>판매단가</label><input type="number" id="sale_${i.id}" value="${i.sale_price}"></div>
           </div>
           <div class="field"><label>현재 재고 수량 (직접 고치면 그 값으로 맞춰집니다)</label><input type="number" id="stock_${i.id}" value="${stockMap[i.id] || 0}"></div>
+          <div class="row2">
+            <div class="field"><label>중량(kg, 선택)</label><input type="number" id="weight_${i.id}" value="${i.weight_kg ?? ''}"></div>
+            <div class="field"><label>매입처 (선택)</label><input type="text" id="vendor_${i.id}" value="${i.vendor || ''}"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>상품별 택배비 (선택, 비우면 구간표 적용)</label><input type="number" id="shipfee_${i.id}" value="${i.shipping_fee_override ?? ''}"></div>
+            <div class="field"><label>포장비 (선택)</label><input type="number" id="packfee_${i.id}" value="${i.packing_fee || 0}"></div>
+          </div>
+          <div class="field"><label>기타비용 (선택)</label><input type="number" id="miscfee_${i.id}" value="${i.misc_fee || 0}"></div>
           <div class="item-edit-actions">
             <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveItem(${i.id})">저장</button>
             <button class="btn btn-ghost btn-sm" onclick="toggleActive(${i.id}, ${!i.active})">${i.active ? '비활성화' : '활성화'}</button>
@@ -182,8 +248,15 @@
     const cost_price = Number(document.getElementById('newCost').value) || 0;
     const sale_price = Number(document.getElementById('newSale').value) || 0;
     const initialStock = Number(document.getElementById('newStock').value) || 0;
+    const weight_kg = document.getElementById('newWeight').value === '' ? null : Number(document.getElementById('newWeight').value);
+    const vendor = document.getElementById('newVendor').value.trim() || null;
+    const shipping_fee_override = document.getElementById('newShipFee').value === '' ? null : Number(document.getElementById('newShipFee').value);
+    const packing_fee = Number(document.getElementById('newPackFee').value) || 0;
+    const misc_fee = Number(document.getElementById('newMiscFee').value) || 0;
     if(!name){ setMsg('createMsg', '품목명을 입력하세요', false); return; }
-    const { data, error } = await db.from('items').insert({ category, name, unit, cost_price, sale_price }).select().single();
+    const { data, error } = await db.from('items').insert({
+      category, name, unit, cost_price, sale_price, weight_kg, vendor, shipping_fee_override, packing_fee, misc_fee
+    }).select().single();
     if(error){ setMsg('createMsg', '추가 실패: ' + error.message, false); return; }
     if(initialStock > 0){
       const { error: moveError } = await db.from('stock_movements').insert({
@@ -192,10 +265,8 @@
       if(moveError){ setMsg('createMsg', '품목은 추가됐지만 초기 재고 등록 실패: ' + moveError.message, false); }
     }
     setMsg('createMsg', '추가됨', true);
-    document.getElementById('newName').value = '';
-    document.getElementById('newCost').value = '';
-    document.getElementById('newSale').value = '';
-    document.getElementById('newStock').value = '';
+    ['newName','newCost','newSale','newStock','newWeight','newVendor','newShipFee','newPackFee','newMiscFee']
+      .forEach(id => document.getElementById(id).value = '');
     switchTab(category);
     loadAll();
   }
@@ -207,8 +278,17 @@
     const sale_price = Number(document.getElementById('sale_' + id).value) || 0;
     const newStock = Number(document.getElementById('stock_' + id).value) || 0;
     const oldStock = Number(stockMap[id] || 0);
+    const weightEl = document.getElementById('weight_' + id).value;
+    const weight_kg = weightEl === '' ? null : Number(weightEl);
+    const vendor = document.getElementById('vendor_' + id).value.trim() || null;
+    const shipFeeEl = document.getElementById('shipfee_' + id).value;
+    const shipping_fee_override = shipFeeEl === '' ? null : Number(shipFeeEl);
+    const packing_fee = Number(document.getElementById('packfee_' + id).value) || 0;
+    const misc_fee = Number(document.getElementById('miscfee_' + id).value) || 0;
     if(!name){ setMsg('editMsg_' + id, '품목명을 입력하세요', false); return; }
-    const { error } = await db.from('items').update({ name, unit, cost_price, sale_price }).eq('id', id);
+    const { error } = await db.from('items').update({
+      name, unit, cost_price, sale_price, weight_kg, vendor, shipping_fee_override, packing_fee, misc_fee
+    }).eq('id', id);
     if(error){ setMsg('editMsg_' + id, '저장 실패: ' + error.message, false); return; }
     const delta = newStock - oldStock;
     if(delta !== 0){
@@ -241,6 +321,7 @@
   }
 
   loadAll();
+  loadTiers();
 </script>
 
 </body>

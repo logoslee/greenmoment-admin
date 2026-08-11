@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>택배/주문 업로드</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+<style>
+  :root{
+    --blue:#2563eb; --blue-dark:#1d4ed8; --blue-bg:#eff6ff;
+    --text:#0f172a; --sub:#64748b; --line:#e5e7eb; --red:#dc2626; --green:#16a34a; --orange:#d97706; --orange-bg:#fffbeb;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:#f8fafc; color:var(--text); font-family:'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,sans-serif; }
+  .wrap{ max-width:760px; margin:0 auto; padding:16px 16px 80px; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  h1{ font-size:20px; font-weight:700; margin:0; }
+  .nav-links{ display:flex; gap:10px; }
+  .nav-links a{ font-size:13px; color:var(--blue); text-decoration:none; font-weight:600; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; box-shadow:0 1px 3px rgba(15,23,42,0.04); }
+  .card h2{ font-size:15px; font-weight:700; margin:0 0 12px; }
+  .field{ margin-bottom:10px; }
+  .field label{ display:block; font-size:12px; color:var(--sub); font-weight:600; margin-bottom:4px; }
+  .field input, .field select{ width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font-size:15px; font-family:inherit; background:#fff; }
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .btn{ padding:10px 14px; border:none; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .btn-primary{ background:var(--blue); color:#fff; width:100%; padding:12px; }
+  .btn-primary:disabled{ background:#94a3b8; cursor:not-allowed; }
+  .btn-ghost{ background:var(--blue-bg); color:var(--blue-dark); font-size:13px; padding:8px 12px; }
+  .msg{ font-size:12px; margin-top:8px; text-align:center; min-height:16px; }
+  .msg.ok{ color:var(--green); }
+  .msg.err{ color:var(--red); }
+  .summary-line{ font-size:13px; color:var(--sub); margin-bottom:10px; }
+  .summary-line b{ color:var(--text); }
+  .unmatched-row{
+    display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); flex-wrap:wrap;
+  }
+  .unmatched-row:last-child{ border-bottom:none; }
+  .unmatched-name{ flex:1; min-width:160px; font-size:13px; font-weight:600; }
+  .unmatched-count{ font-size:11px; color:var(--sub); }
+  .unmatched-row select{ flex:1; min-width:140px; padding:7px 8px; border:1px solid var(--line); border-radius:8px; font-size:13px; font-family:inherit; }
+  .badge{ display:inline-block; font-size:11px; padding:2px 8px; border-radius:99px; font-weight:700; }
+  .badge-warn{ background:var(--orange-bg); color:var(--orange); }
+  .badge-ok{ background:#f0fdf4; color:var(--green); }
+  table.agg{ width:100%; border-collapse:collapse; font-size:13px; }
+  table.agg th{ text-align:left; color:var(--sub); font-weight:600; padding:6px 4px; border-bottom:1px solid var(--line); font-size:12px; }
+  table.agg td{ padding:7px 4px; border-bottom:1px solid var(--line); }
+  table.agg tr:last-child td{ border-bottom:none; }
+  table.agg td.num{ text-align:right; }
+  .empty-box{ color:var(--sub); font-size:13px; text-align:center; padding:16px 0; }
+  .loading{ color:var(--sub); font-size:13px; text-align:center; padding:16px 0; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <h1>택배/주문 업로드</h1>
+    <div class="nav-links"><a href="items.html">품목관리</a><a href="input.html">입력</a><a href="index.html">대시보드</a></div>
+  </div>
+
+  <!-- 1. 어드민 주문양식 업로드 -->
+  <div class="card">
+    <h2>① 어드민 주문양식 업로드</h2>
+    <div class="field"><label>이 파일의 출고 기준일 (파일에 날짜가 없어서 직접 지정)</label>
+      <input type="date" id="adminDate">
+    </div>
+    <div class="field"><label>파일 선택 (.xlsx)</label>
+      <input type="file" id="adminFile" accept=".xlsx,.xls">
+    </div>
+    <div id="adminStatus" class="msg"></div>
+  </div>
+
+  <div class="card" id="adminPreviewCard" style="display:none;">
+    <h2>매칭 확인</h2>
+    <div class="summary-line" id="adminSummary"></div>
+    <div id="adminUnmatched"></div>
+    <button class="btn btn-primary" id="adminSaveBtn" onclick="saveAdminBatch()" style="margin-top:10px;">이대로 저장</button>
+    <div class="msg" id="adminSaveMsg"></div>
+  </div>
+
+  <!-- 2. CJ택배 다운로드양식 업로드 -->
+  <div class="card">
+    <h2>② CJ택배 다운로드양식 업로드 (①을 먼저 저장한 뒤에)</h2>
+    <div class="field"><label>파일 선택 (.xlsx)</label>
+      <input type="file" id="cjFile" accept=".xlsx,.xls">
+    </div>
+    <div id="cjStatus" class="msg"></div>
+  </div>
+
+  <div class="card" id="cjPreviewCard" style="display:none;">
+    <h2>매칭 확인 (① 파일과 운송장번호로 매칭 안 된 건만)</h2>
+    <div class="summary-line" id="cjSummary"></div>
+    <div id="cjUnmatched"></div>
+    <button class="btn btn-primary" id="cjSaveBtn" onclick="saveCjBatch()" style="margin-top:10px;">이대로 저장</button>
+    <div class="msg" id="cjSaveMsg"></div>
+  </div>
+
+  <!-- 3. 집계 -->
+  <div class="card">
+    <h2>출고 집계</h2>
+    <div class="row2">
+      <div class="field"><label>시작일</label><input type="date" id="aggStart"></div>
+      <div class="field"><label>종료일</label><input type="date" id="aggEnd"></div>
+    </div>
+    <button class="btn btn-ghost" onclick="loadAggregation()">조회</button>
+    <div id="aggResult" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<script>
+  const { createClient } = supabase;
+  let db = null;
+  try{
+    db = createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey);
+  }catch(e){
+    document.querySelector('.wrap').innerHTML =
+      '<div class="topbar"><h1>택배/주문 업로드</h1></div><div class="card" style="color:#dc2626;">' +
+      'config.js에 Supabase URL/anon key가 아직 설정되지 않았습니다.<br>README.md의 1단계를 먼저 진행해주세요.</div>';
+    throw e;
+  }
+
+  function fmt(n){ return Number(n || 0).toLocaleString('ko-KR'); }
+  function todayStr(){
+    const d = new Date();
+    const tz = d.getTimezoneOffset() * 60000;
+    return new Date(d - tz).toISOString().slice(0,10);
+  }
+  document.getElementById('adminDate').value = todayStr();
+  document.getElementById('aggStart').value = todayStr().slice(0,8) + '01';
+  document.getElementById('aggEnd').value = todayStr();
+
+  // ---------- 상품명 매칭 ----------
+  let itemsCache = [];       // 활성 품목 전체
+  let aliasMap = {};         // normalize(alias_text) -> item_id
+  let itemNameMap = {};      // normalize(items.name) -> item_id
+
+  function normalizeName(s){
+    return (s || '')
+      .toString()
+      .replace(/\(([^)]*)\)/g, '')      // 괄호 안 내용 제거
+      .replace(/[Kk][Gg]|키로/g, 'kg')
+      .replace(/\s+/g, '')
+      .toLowerCase();
+  }
+  function normalizeHeader(s){
+    return (s || '').toString().replace(/\s+/g, '');
+  }
+
+  async function loadMatchData(){
+    const [itemsRes, aliasRes] = await Promise.all([
+      db.from('items').select('id,name,category,weight_kg,shipping_fee_override').eq('active', true),
+      db.from('item_aliases').select('item_id, alias_text'),
+    ]);
+    itemsCache = itemsRes.data || [];
+    itemNameMap = {};
+    itemsCache.forEach(i => { itemNameMap[normalizeName(i.name)] = i.id; });
+    aliasMap = {};
+    (aliasRes.data || []).forEach(a => { aliasMap[normalizeName(a.alias_text)] = a.item_id; });
+  }
+
+  function matchItem(rawName){
+    const norm = normalizeName(rawName);
+    if(aliasMap[norm]) return aliasMap[norm];
+    if(itemNameMap[norm]) return itemNameMap[norm];
+    return null;
+  }
+
+  async function confirmAlias(rawName, itemId){
+    aliasMap[normalizeName(rawName)] = itemId;
+    await db.from('item_aliases')
+      .upsert({ item_id: itemId, alias_text: normalizeName(rawName) }, { onConflict: 'alias_text', ignoreDuplicates: true });
+  }
+
+  function itemOptionsHtml(selectedId){
+    const groups = { '원물': [], '박스': [], '부자재': [] };
+    itemsCache.forEach(i => { if(groups[i.category]) groups[i.category].push(i); });
+    let html = '<option value="">-- 품목 선택 --</option>';
+    Object.keys(groups).forEach(cat => {
+      if(!groups[cat].length) return;
+      html += `<optgroup label="${cat}">`;
+      groups[cat].forEach(i => {
+        html += `<option value="${i.id}" ${String(i.id) === String(selectedId) ? 'selected' : ''}>${i.name}</option>`;
+      });
+      html += '</optgroup>';
+    });
+    return html;
+  }
+
+  // ---------- 엑셀 읽기 ----------
+  function readSheetRows(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try{
+          const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+          resolve(rows);
+        }catch(err){ reject(err); }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function buildHeaderIndex(headerRow){
+    const idx = {};
+    headerRow.forEach((h, i) => { idx[normalizeHeader(h)] = i; });
+    return idx;
+  }
+
+  // ---------- ① 어드민 주문양식 ----------
+  let adminPending = []; // {order_no, tracking_no, raw_product_name, quantity, vendor, item_id}
+  let adminUnmatchedNames = [];
+
+  document.getElementById('adminFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const statusEl = document.getElementById('adminStatus');
+    statusEl.textContent = '읽는 중...'; statusEl.className = 'msg';
+    try{
+      await loadMatchData();
+      const rows = await readSheetRows(file);
+      const header = rows[0];
+      const idx = buildHeaderIndex(header);
+      const need = ['수량','상품명','운송장번호','상품주문번호','매입처','택배사'];
+      const missing = need.filter(k => idx[k] === undefined);
+      if(missing.length){
+        statusEl.textContent = '파일 형식을 인식하지 못했습니다. 누락된 컬럼: ' + missing.join(', ');
+        statusEl.className = 'msg err';
+        return;
+      }
+      adminPending = [];
+      for(let r = 1; r < rows.length; r++){
+        const row = rows[r];
+        if(!row || !row.length) continue;
+        const raw_product_name = (row[idx['상품명']] || '').toString().trim();
+        if(!raw_product_name) continue;
+        const order_no = (row[idx['상품주문번호']] || '').toString().trim() || null;
+        adminPending.push({
+          order_no,
+          tracking_no: (row[idx['운송장번호']] || '').toString().trim() || null,
+          raw_product_name,
+          quantity: Number(row[idx['수량']]) || 1,
+          vendor: (row[idx['매입처']] || '').toString().trim() || null,
+          item_id: matchItem(raw_product_name),
+        });
+      }
+      renderAdminPreview();
+      statusEl.textContent = `${adminPending.length}행 인식 완료`;
+      statusEl.className = 'msg ok';
+    }catch(err){
+      statusEl.textContent = '읽기 실패: ' + err.message;
+      statusEl.className = 'msg err';
+    }
+  });
+
+  function renderAdminPreview(){
+    const matched = adminPending.filter(r => r.item_id).length;
+    const unmatchedRows = adminPending.filter(r => !r.item_id);
+    const byName = {};
+    unmatchedRows.forEach(r => { (byName[r.raw_product_name] = byName[r.raw_product_name] || []).push(r); });
+    adminUnmatchedNames = Object.keys(byName);
+
+    document.getElementById('adminSummary').innerHTML =
+      `인식 <b>${adminPending.length}</b>건 · 매칭 <b>${matched}</b>건 · 미매칭 <b>${unmatchedRows.length}</b>건`;
+
+    const el = document.getElementById('adminUnmatched');
+    if(!adminUnmatchedNames.length){
+      el.innerHTML = '<div class="empty-box">미매칭 품목이 없습니다 🎉</div>';
+    }else{
+      el.innerHTML = adminUnmatchedNames.map((name, i) => `
+        <div class="unmatched-row">
+          <div>
+            <div class="unmatched-name">${name}</div>
+            <div class="unmatched-count">${byName[name].length}건</div>
+          </div>
+          <select id="adminPick_${i}">${itemOptionsHtml(null)}</select>
+        </div>`).join('');
+    }
+    document.getElementById('adminPreviewCard').style.display = 'block';
+  }
+
+  async function saveAdminBatch(){
+    const btn = document.getElementById('adminSaveBtn');
+    const msgEl = document.getElementById('adminSaveMsg');
+    btn.disabled = true;
+    msgEl.textContent = '저장 중...'; msgEl.className = 'msg';
+
+    // 미매칭 항목 선택값 확정 → 별칭 저장 + item_id 채우기
+    for(let i = 0; i < adminUnmatchedNames.length; i++){
+      const name = adminUnmatchedNames[i];
+      const picked = document.getElementById('adminPick_' + i).value;
+      if(picked){
+        await confirmAlias(name, picked);
+        adminPending.filter(r => r.raw_product_name === name).forEach(r => r.item_id = Number(picked));
+      }
+    }
+
+    const shippedDate = document.getElementById('adminDate').value;
+    const rows = adminPending.map(r => ({
+      shipped_date: shippedDate,
+      source: 'admin',
+      order_no: r.order_no,
+      tracking_no: r.tracking_no,
+      item_id: r.item_id,
+      raw_product_name: r.raw_product_name,
+      quantity: r.quantity,
+      vendor: r.vendor,
+    }));
+
+    const { data: inserted, error } = await db.from('shipments')
+      .upsert(rows, { onConflict: 'source,order_no', ignoreDuplicates: true })
+      .select();
+    if(error){
+      msgEl.textContent = '저장 실패: ' + error.message; msgEl.className = 'msg err';
+      btn.disabled = false;
+      return;
+    }
+
+    const movements = (inserted || [])
+      .filter(r => r.item_id)
+      .map(r => ({ movement_date: r.shipped_date, item_id: r.item_id, movement_type: '출하', quantity: r.quantity, note: '어드민 업로드 자동반영 (주문번호 ' + (r.order_no || '-') + ')' }));
+    if(movements.length){
+      const { error: moveErr } = await db.from('stock_movements').insert(movements);
+      if(moveErr){ msgEl.textContent = '주문은 저장됐지만 재고 반영 일부 실패: ' + moveErr.message; msgEl.className = 'msg err'; btn.disabled = false; return; }
+    }
+
+    const skipped = rows.length - (inserted || []).length;
+    msgEl.textContent = `저장 완료 — 새로 ${inserted.length}건 등록, 이미 있던 ${skipped}건은 건너뜀`;
+    msgEl.className = 'msg ok';
+    btn.disabled = false;
+    loadAggregation();
+  }
+
+  // ---------- ② CJ택배 다운로드양식 ----------
+  let cjPending = []; // {tracking_no, courier_fee, shipped_date, raw_product_name, quantity, item_id, matchedExistingId}
+  let cjNeedsInsert = [];
+  let cjUnmatchedNames = [];
+
+  document.getElementById('cjFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const statusEl = document.getElementById('cjStatus');
+    statusEl.textContent = '읽는 중...'; statusEl.className = 'msg';
+    try{
+      await loadMatchData();
+      const rows = await readSheetRows(file);
+      const header = rows[0];
+      const idx = buildHeaderIndex(header);
+      const need = ['운송장번호','운임합계','상품명','수량','집화예정일자'];
+      const missing = need.filter(k => idx[k] === undefined);
+      if(missing.length){
+        statusEl.textContent = '파일 형식을 인식하지 못했습니다. 누락된 컬럼: ' + missing.join(', ');
+        statusEl.className = 'msg err';
+        return;
+      }
+      cjPending = [];
+      for(let r = 1; r < rows.length; r++){
+        const row = rows[r];
+        if(!row || !row.length) continue;
+        const tracking_no = (row[idx['운송장번호']] || '').toString().trim();
+        if(!tracking_no) continue;
+        const raw_product_name = (row[idx['상품명']] || '').toString().trim();
+        cjPending.push({
+          tracking_no,
+          courier_fee: Number((row[idx['운임합계']] || '0').toString().replace(/,/g, '')) || 0,
+          shipped_date: (row[idx['집화예정일자']] || '').toString().trim() || todayStr(),
+          raw_product_name,
+          quantity: Number(row[idx['수량']]) || 1,
+          item_id: matchItem(raw_product_name),
+        });
+      }
+
+      // 기존 shipments에서 운송장번호로 매칭되는 건 조회 (admin 업로드분 보강용, cj 중복 방지용 겸용)
+      const trackingNos = [...new Set(cjPending.map(r => r.tracking_no))];
+      const { data: existing, error: exErr } = await db.from('shipments')
+        .select('id, tracking_no, source').in('tracking_no', trackingNos);
+      if(exErr){ statusEl.textContent = '조회 실패: ' + exErr.message; statusEl.className = 'msg err'; return; }
+      const existingByTracking = {};
+      (existing || []).forEach(row => { existingByTracking[row.tracking_no] = row; });
+
+      cjNeedsInsert = [];
+      let toEnrichCount = 0, alreadyCount = 0;
+      cjPending.forEach(r => {
+        const found = existingByTracking[r.tracking_no];
+        if(found && found.source === 'admin'){ toEnrichCount++; }
+        else if(found){ alreadyCount++; }
+        else { cjNeedsInsert.push(r); }
+      });
+
+      const byName = {};
+      cjNeedsInsert.filter(r => !r.item_id).forEach(r => { (byName[r.raw_product_name] = byName[r.raw_product_name] || []).push(r); });
+      cjUnmatchedNames = Object.keys(byName);
+
+      document.getElementById('cjSummary').innerHTML =
+        `인식 <b>${cjPending.length}</b>건 · ①과 매칭되어 택배비만 보강 <b>${toEnrichCount}</b>건 · ` +
+        `이미 처리됨 <b>${alreadyCount}</b>건 · 신규 등록 대상 <b>${cjNeedsInsert.length}</b>건 (미매칭 품목 <b>${cjUnmatchedNames.length}</b>건)`;
+
+      const el = document.getElementById('cjUnmatched');
+      if(!cjUnmatchedNames.length){
+        el.innerHTML = '<div class="empty-box">미매칭 품목이 없습니다 🎉</div>';
+      }else{
+        el.innerHTML = cjUnmatchedNames.map((name, i) => `
+          <div class="unmatched-row">
+            <div>
+              <div class="unmatched-name">${name}</div>
+              <div class="unmatched-count">${byName[name].length}건</div>
+            </div>
+            <select id="cjPick_${i}">${itemOptionsHtml(null)}</select>
+          </div>`).join('');
+      }
+      document.getElementById('cjPreviewCard').style.display = 'block';
+      statusEl.textContent = `${cjPending.length}행 인식 완료`;
+      statusEl.className = 'msg ok';
+    }catch(err){
+      statusEl.textContent = '읽기 실패: ' + err.message;
+      statusEl.className = 'msg err';
+    }
+  });
+
+  async function saveCjBatch(){
+    const btn = document.getElementById('cjSaveBtn');
+    const msgEl = document.getElementById('cjSaveMsg');
+    btn.disabled = true;
+    msgEl.textContent = '저장 중...'; msgEl.className = 'msg';
+
+    for(let i = 0; i < cjUnmatchedNames.length; i++){
+      const name = cjUnmatchedNames[i];
+      const picked = document.getElementById('cjPick_' + i).value;
+      if(picked){
+        await confirmAlias(name, picked);
+        cjPending.filter(r => r.raw_product_name === name).forEach(r => r.item_id = Number(picked));
+        cjNeedsInsert.filter(r => r.raw_product_name === name).forEach(r => r.item_id = Number(picked));
+      }
+    }
+
+    // 1) ①과 매칭된 건: 택배비/날짜 보강 (id 기준 upsert = update)
+    const trackingNos = [...new Set(cjPending.map(r => r.tracking_no))];
+    const { data: existing, error: exErr } = await db.from('shipments')
+      .select('id, tracking_no, source, item_id').in('tracking_no', trackingNos);
+    if(exErr){ msgEl.textContent = '조회 실패: ' + exErr.message; msgEl.className = 'msg err'; btn.disabled = false; return; }
+    const existingByTracking = {};
+    (existing || []).forEach(row => { existingByTracking[row.tracking_no] = row; });
+
+    const enrichUpdates = [];
+    cjPending.forEach(r => {
+      const found = existingByTracking[r.tracking_no];
+      if(found && found.source === 'admin'){
+        enrichUpdates.push({ id: found.id, courier_fee: r.courier_fee });
+      }
+    });
+    if(enrichUpdates.length){
+      const results = await Promise.all(enrichUpdates.map(u =>
+        db.from('shipments').update({ courier_fee: u.courier_fee }).eq('id', u.id)
+      ));
+      const failed = results.find(r => r.error);
+      if(failed){ msgEl.textContent = '택배비 보강 실패: ' + failed.error.message; msgEl.className = 'msg err'; btn.disabled = false; return; }
+    }
+
+    // 2) ①에 없던 신규(벤더 미탐지 등) 건: 새로 등록
+    const insertRows = cjNeedsInsert.map(r => ({
+      shipped_date: r.shipped_date, source: 'cj', tracking_no: r.tracking_no,
+      item_id: r.item_id, raw_product_name: r.raw_product_name, quantity: r.quantity, courier_fee: r.courier_fee,
+    }));
+    let newlyInserted = [];
+    if(insertRows.length){
+      const { data: ins, error: insErr } = await db.from('shipments')
+        .upsert(insertRows, { onConflict: 'tracking_no', ignoreDuplicates: true })
+        .select();
+      if(insErr){ msgEl.textContent = '신규 등록 실패: ' + insErr.message; msgEl.className = 'msg err'; btn.disabled = false; return; }
+      newlyInserted = ins || [];
+    }
+
+    const movements = newlyInserted
+      .filter(r => r.item_id)
+      .map(r => ({ movement_date: r.shipped_date, item_id: r.item_id, movement_type: '출하', quantity: r.quantity, note: 'CJ 업로드 자동반영 (운송장 ' + r.tracking_no + ')' }));
+    if(movements.length){
+      const { error: moveErr } = await db.from('stock_movements').insert(movements);
+      if(moveErr){ msgEl.textContent = '등록됐지만 재고 반영 일부 실패: ' + moveErr.message; msgEl.className = 'msg err'; btn.disabled = false; return; }
+    }
+
+    msgEl.textContent = `보강 ${enrichUpdates.length}건, 신규등록 ${newlyInserted.length}건 완료`;
+    msgEl.className = 'msg ok';
+    btn.disabled = false;
+    loadAggregation();
+  }
+
+  // ---------- 집계 ----------
+  async function loadAggregation(){
+    const start = document.getElementById('aggStart').value;
+    const end = document.getElementById('aggEnd').value;
+    const el = document.getElementById('aggResult');
+    if(!start || !end) return;
+    el.innerHTML = '<div class="loading">불러오는 중...</div>';
+    const { data, error } = await db.from('shipments')
+      .select('quantity, courier_fee, item_id, items(name, unit)')
+      .gte('shipped_date', start).lte('shipped_date', end);
+    if(error){ el.innerHTML = `<div class="empty-box">불러오기 실패: ${error.message}</div>`; return; }
+    const rows = data || [];
+    if(!rows.length){ el.innerHTML = '<div class="empty-box">해당 기간 출고 기록이 없습니다.</div>'; return; }
+
+    const byItem = {};
+    let totalBoxes = 0, totalFee = 0;
+    rows.forEach(r => {
+      totalBoxes += Number(r.quantity || 0);
+      totalFee += Number(r.courier_fee || 0);
+      const key = r.item_id || 'unmatched';
+      const name = r.items ? r.items.name : '(미매칭 품목)';
+      if(!byItem[key]) byItem[key] = { name, unit: r.items ? r.items.unit : '', qty: 0 };
+      byItem[key].qty += Number(r.quantity || 0);
+    });
+    const list = Object.values(byItem).sort((a, b) => b.qty - a.qty);
+
+    el.innerHTML = `
+      <div class="summary-line">총 출고 <b>${fmt(totalBoxes)}</b>건 · 총 택배비 <b>${fmt(totalFee)}</b>원</div>
+      <table class="agg">
+        <thead><tr><th>품목</th><th class="num">수량</th></tr></thead>
+        <tbody>
+          ${list.map(r => `<tr><td>${r.name}</td><td class="num">${fmt(r.qty)}${r.unit || ''}</td></tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  loadMatchData();
+</script>
+
+</body>
+</html>

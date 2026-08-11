@@ -107,9 +107,18 @@
     <h1>재고·순이익 대시보드</h1>
     <div class="nav-links">
       <a class="dash-link" href="items.html">품목관리</a>
+      <a class="dash-link" href="shipments.html">택배업로드</a>
       <a class="dash-link" href="labor.html">인건비</a>
       <a class="input-link" href="input.html">+ 오늘 입력</a>
     </div>
+  </div>
+
+  <div class="card" style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+    <div>
+      <div style="font-size:14px; font-weight:700;">구글시트 내보내기</div>
+      <div style="font-size:12px; color:var(--sub); margin-top:2px;" id="sheetsStatus">이번 달 매출·비용·순이익 요약과 품목별 출고 집계를 구글시트에 씁니다.</div>
+    </div>
+    <button class="range-btn" onclick="exportToSheets()">지금 내보내기</button>
   </div>
 
   <div class="cards">
@@ -168,6 +177,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="config.js"></script>
 <script>
   const { createClient } = supabase;
@@ -260,10 +270,120 @@
       </div>`).join('');
   }
 
+  // ---------- 구글시트 내보내기 ----------
+  function getGoogleAccessToken(){
+    return new Promise((resolve, reject) => {
+      if(!window.GOOGLE_CONFIG || !window.GOOGLE_CONFIG.clientId || window.GOOGLE_CONFIG.clientId.indexOf('YOUR_') === 0){
+        reject(new Error('config.js에 구글 설정이 아직 없습니다. README.md의 구글시트 연동 안내를 먼저 진행해주세요.'));
+        return;
+      }
+      if(typeof google === 'undefined' || !google.accounts){
+        reject(new Error('구글 로그인 스크립트를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해주세요.'));
+        return;
+      }
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: window.GOOGLE_CONFIG.clientId,
+        scope: 'https://www.googleapis.com/auth/spreadsheets',
+        callback: (resp) => {
+          if(resp.error){ reject(new Error(resp.error)); return; }
+          resolve(resp.access_token);
+        },
+      });
+      client.requestAccessToken();
+    });
+  }
+
+  async function sheetsApi(token, pathAndQuery, method, body){
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${window.GOOGLE_CONFIG.spreadsheetId}/${pathAndQuery}`;
+    const res = await fetch(url, {
+      method,
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: method === 'GET' ? undefined : JSON.stringify(body || {}),
+    });
+    if(!res.ok){
+      const errBody = await res.text();
+      throw new Error(`Sheets API 오류 (${res.status}): ${errBody}`);
+    }
+    return res.json();
+  }
+
+  async function ensureSheetTab(token, title){
+    const meta = await sheetsApi(token, '?fields=sheets.properties.title', 'GET');
+    const exists = (meta.sheets || []).some(s => s.properties.title === title);
+    if(exists) return;
+    await sheetsApi(token, ':batchUpdate', 'POST', { requests: [{ addSheet: { properties: { title } } }] });
+  }
+
+  async function exportToSheets(){
+    const statusEl = document.getElementById('sheetsStatus');
+    statusEl.textContent = '구글 로그인 중...';
+    try{
+      const token = await getGoogleAccessToken();
+      statusEl.textContent = '데이터 불러오는 중...';
+
+      const monthStr = todayStr().slice(0, 7);
+      const monthStart = monthStr + '-01';
+      const monthEnd = todayStr();
+
+      const [summaryRes, shipRes] = await Promise.all([
+        db.from('v_daily_summary').select('*').gte('date', monthStart).lte('date', monthEnd).order('date'),
+        db.from('shipments').select('quantity, item_id, items(name, unit)').gte('shipped_date', monthStart).lte('shipped_date', monthEnd),
+      ]);
+      if(summaryRes.error) throw summaryRes.error;
+      if(shipRes.error) throw shipRes.error;
+
+      const byItem = {};
+      (shipRes.data || []).forEach(r => {
+        const name = r.items ? r.items.name : '(미매칭)';
+        const unit = r.items ? r.items.unit : '';
+        const key = name + '|' + unit;
+        byItem[key] = (byItem[key] || 0) + Number(r.quantity || 0);
+      });
+
+      const sheetTitle = monthStr;
+      statusEl.textContent = '시트 준비 중...';
+      await ensureSheetTab(token, sheetTitle);
+
+      const summaryHeader = ['날짜','매출','원물원가','박스비','부자재비','포장비','상품기타비용','폐기손실','택배비','기타비용','인건비','순이익'];
+      const summaryRows = (summaryRes.data || []).map(r => [
+        r.date, r.revenue, r.raw_cogs, r.box_cost, r.supply_cost, r.packing_cost, r.item_misc_cost,
+        r.waste_cost, r.shipping_cost, r.other_cost, r.labor_cost, r.net_profit,
+      ]);
+
+      const itemHeader = ['품목', '수량'];
+      const itemRows = Object.keys(byItem).map(k => {
+        const [name, unit] = k.split('|');
+        return [name, byItem[k] + (unit || '')];
+      });
+
+      const values = [
+        [`${monthStr} 매출/비용/순이익`],
+        summaryHeader,
+        ...summaryRows,
+        [],
+        [`${monthStr} 품목별 출고 집계`],
+        itemHeader,
+        ...itemRows,
+      ];
+
+      statusEl.textContent = '쓰는 중...';
+      const clearRange = encodeURIComponent(`${sheetTitle}!A1:Z2000`);
+      await sheetsApi(token, `values/${clearRange}:clear`, 'POST', {});
+      const writeRange = encodeURIComponent(`${sheetTitle}!A1`);
+      await sheetsApi(token, `values/${writeRange}?valueInputOption=USER_ENTERED`, 'PUT', { values });
+
+      statusEl.textContent = `${sheetTitle} 시트에 저장 완료 (${new Date().toLocaleTimeString('ko-KR')})`;
+    }catch(err){
+      console.error(err);
+      statusEl.textContent = '내보내기 실패: ' + (err && err.message ? err.message : err);
+    }
+  }
+
   function renderCards(summaryRows, stockRows){
     const today = todayStr();
     const todayRow = summaryRows.find(r => r.date === today) || {
-      revenue: 0, net_profit: 0, raw_cogs: 0, box_cost: 0, supply_cost: 0, waste_cost: 0, shipping_cost: 0, other_cost: 0, labor_cost: 0
+      revenue: 0, net_profit: 0, raw_cogs: 0, box_cost: 0, supply_cost: 0, packing_cost: 0, item_misc_cost: 0,
+      waste_cost: 0, shipping_cost: 0, other_cost: 0, labor_cost: 0
     };
     const rawTotal = stockRows.filter(s => s.category === '원물').reduce((a, s) => a + Number(s.current_stock), 0);
     const boxTotal = stockRows.filter(s => s.category === '박스').reduce((a, s) => a + Number(s.current_stock), 0);
@@ -277,6 +397,8 @@
       ['원물원가', todayRow.raw_cogs],
       ['박스비', todayRow.box_cost],
       ['부자재비', todayRow.supply_cost],
+      ['포장비', todayRow.packing_cost],
+      ['상품기타비용', todayRow.item_misc_cost],
       ['폐기손실', todayRow.waste_cost],
       ['택배비', todayRow.shipping_cost],
       ['인건비', todayRow.labor_cost],
@@ -289,7 +411,7 @@
     document.getElementById('cardProfit').innerHTML = `
       <div class="card-label">오늘 순이익</div>
       <div class="card-value ${todayRow.net_profit < 0 ? 'neg' : ''}">${fmt(todayRow.net_profit)}원</div>
-      <div class="card-sub">매출 - (원물원가+박스비+부자재비+폐기+택배비+인건비+기타)</div>
+      <div class="card-sub">매출 - (원물원가+박스비+부자재비+포장비+상품기타비용+폐기+택배비+인건비+기타)</div>
       <div class="card-sub">${costBreakdown}</div>`;
 
     document.getElementById('cardRaw').innerHTML = `
