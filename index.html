@@ -141,8 +141,13 @@
       <div id="trendChart"><div class="loading">불러오는 중...</div></div>
     </div>
     <div class="card">
-      <div class="panel-title">최근 폐기 내역</div>
-      <div id="wasteTable"><div class="loading">불러오는 중...</div></div>
+      <div class="panel-title">폐기 내역</div>
+      <div class="range-form" style="margin-top:0; padding-top:0; border-top:none;">
+        <div class="range-field"><label>시작일</label><input type="date" id="wasteRangeStart"></div>
+        <div class="range-field"><label>종료일</label><input type="date" id="wasteRangeEnd"></div>
+        <button class="range-btn" onclick="loadWasteRange()">조회</button>
+      </div>
+      <div id="wasteTable" style="margin-top:14px;"><div class="loading">불러오는 중...</div></div>
     </div>
   </div>
 
@@ -190,9 +195,28 @@
 
   (function initRangeDefaults(){
     const today = todayStr();
-    document.getElementById('rangeStart').value = today.slice(0,8) + '01';
+    const monthStart = today.slice(0,8) + '01';
+    document.getElementById('rangeStart').value = monthStart;
     document.getElementById('rangeEnd').value = today;
+    document.getElementById('wasteRangeStart').value = monthStart;
+    document.getElementById('wasteRangeEnd').value = today;
   })();
+
+  async function loadWasteRange(){
+    const start = document.getElementById('wasteRangeStart').value;
+    const end = document.getElementById('wasteRangeEnd').value;
+    const el = document.getElementById('wasteTable');
+    if(!start || !end){ el.innerHTML = '<div class="error-box">시작일과 종료일을 선택하세요</div>'; return; }
+    if(start > end){ el.innerHTML = '<div class="error-box">시작일이 종료일보다 늦을 수 없어요</div>'; return; }
+    el.innerHTML = '<div class="loading">불러오는 중...</div>';
+    const { data, error } = await db.from('stock_movements')
+      .select('*, items(name,unit)')
+      .eq('movement_type', '폐기')
+      .gte('movement_date', start).lte('movement_date', end)
+      .order('movement_date', { ascending: false });
+    if(error){ el.innerHTML = `<div class="error-box">불러오기 실패: ${error.message}</div>`; return; }
+    renderWasteTable(data || []);
+  }
 
   async function queryCustomRange(){
     const start = document.getElementById('rangeStart').value;
@@ -351,14 +375,12 @@
       const since = new Date(Date.now() - 29*86400000);
       const sinceStr = new Date(since - since.getTimezoneOffset()*60000).toISOString().slice(0,10);
 
-      const [summary, stock, waste] = await Promise.all([
+      const [summary, stock] = await Promise.all([
         db.from('v_daily_summary').select('*').gte('date', sinceStr).order('date', { ascending: true }),
         db.from('v_stock_current').select('*').order('current_stock', { ascending: false }),
-        db.from('stock_movements').select('*, items(name,unit)').eq('movement_type', '폐기').order('movement_date', { ascending: false }).limit(10),
       ]);
       if(summary.error) throw summary.error;
       if(stock.error) throw stock.error;
-      if(waste.error) throw waste.error;
 
       renderCards(summary.data || [], stock.data || []);
       renderPeriodProfit(summary.data || []);
@@ -366,7 +388,7 @@
       renderStock('rawStock', (stock.data || []).filter(s => s.category === '원물'));
       renderStock('boxStock', (stock.data || []).filter(s => s.category === '박스'));
       renderStock('supplyStock', (stock.data || []).filter(s => s.category === '부자재'));
-      renderWasteTable(waste.data || []);
+      loadWasteRange();
     }catch(err){
       console.error(err);
       document.getElementById('app').innerHTML =
