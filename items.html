@@ -67,7 +67,7 @@
     </div>
     <div class="field"><label>품목명</label><input type="text" id="newName" placeholder="예: 거봉 5kg"></div>
     <div class="row3">
-      <div class="field"><label>단위</label><input type="text" id="newUnit" value="kg"></div>
+      <div class="field"><label>단위 (예: kg, 개 — 수량 아님, 숫자 넣지 마세요)</label><input type="text" id="newUnit" value="kg"></div>
       <div class="field"><label>매입단가</label><input type="number" id="newCost" placeholder="0"></div>
       <div class="field"><label>판매단가</label><input type="number" id="newSale" placeholder="0"></div>
     </div>
@@ -149,7 +149,7 @@
         <div class="item-edit" id="edit_${i.id}">
           <div class="row2">
             <div class="field"><label>품목명</label><input type="text" id="name_${i.id}" value="${i.name}"></div>
-            <div class="field"><label>단위</label><input type="text" id="unit_${i.id}" value="${i.unit}"></div>
+            <div class="field"><label>단위 (kg, 개 등 — 수량 아님)</label><input type="text" id="unit_${i.id}" value="${i.unit}"></div>
           </div>
           <div class="row2">
             <div class="field"><label>매입단가</label><input type="number" id="cost_${i.id}" value="${i.cost_price}"></div>
