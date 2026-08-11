@@ -11,5 +11,5 @@ window.SUPABASE_CONFIG = {
 // Google Cloud Console에서 OAuth 클라이언트 ID를 만드는 법은 README.md 참고
 window.GOOGLE_CONFIG = {
   clientId: "YOUR_GOOGLE_OAUTH_CLIENT_ID",
-  spreadsheetId: "YOUR_GOOGLE_SPREADSHEET_ID",
+  spreadsheetId: "1Z3Rm15K5nBJkRLbPgnabsvIzB4zvFDIgc3U3xA9KC5Q",
 };
