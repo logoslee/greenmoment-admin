@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>오늘 입력</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+<style>
+  :root{
+    --blue:#2563eb;
+    --blue-dark:#1d4ed8;
+    --blue-bg:#eff6ff;
+    --text:#0f172a;
+    --sub:#64748b;
+    --line:#e5e7eb;
+    --red:#dc2626;
+    --green:#16a34a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:#f8fafc;
+    color:var(--text);
+    font-family:'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;
+  }
+  .wrap{ max-width:560px; margin:0 auto; padding:16px 16px 80px; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  h1{ font-size:20px; font-weight:700; margin:0; }
+  a.dash-link{ font-size:13px; color:var(--blue); text-decoration:none; font-weight:600; }
+  .date-row{ display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+  .date-row label{ font-size:13px; color:var(--sub); font-weight:600; }
+  .date-row input[type=date]{
+    flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font-size:15px;
+    font-family:inherit; background:#fff;
+  }
+  .card{
+    background:#fff; border:1px solid var(--line); border-radius:14px;
+    padding:16px; margin-bottom:14px; box-shadow:0 1px 3px rgba(15,23,42,0.04);
+  }
+  .card h2{ font-size:15px; font-weight:700; margin:0 0 12px; display:flex; align-items:center; gap:6px; }
+  .field{ margin-bottom:10px; }
+  .field label{ display:block; font-size:12px; color:var(--sub); font-weight:600; margin-bottom:4px; }
+  .field input, .field select, .field textarea{
+    width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px;
+    font-size:15px; font-family:inherit; background:#fff;
+  }
+  .field textarea{ resize:vertical; min-height:44px; }
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .btn{
+    width:100%; padding:12px; border:none; border-radius:10px; font-size:15px; font-weight:700;
+    cursor:pointer; font-family:inherit;
+  }
+  .btn-primary{ background:var(--blue); color:#fff; }
+  .btn-primary:active{ background:var(--blue-dark); }
+  .btn-ghost{
+    background:var(--blue-bg); color:var(--blue-dark); font-size:13px; padding:8px 10px; margin-top:4px;
+  }
+  .msg{ font-size:12px; margin-top:8px; text-align:center; min-height:16px; }
+  .msg.ok{ color:var(--green); }
+  .msg.err{ color:var(--red); }
+  .new-item-box{
+    display:none; margin-top:8px; padding:10px; background:#f8fafc; border:1px dashed var(--line); border-radius:10px;
+  }
+  .new-item-box.open{ display:block; }
+  .today-log{ font-size:13px; color:var(--sub); }
+  .today-log .item{ display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--line); }
+  .today-log .item:last-child{ border-bottom:none; }
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+    background:#0f172a; color:#fff; padding:10px 18px; border-radius:99px; font-size:13px;
+    opacity:0; transition:opacity .2s; pointer-events:none; z-index:50; white-space:nowrap;
+  }
+  .toast.show{ opacity:1; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <h1>오늘 입력</h1>
+    <a class="dash-link" href="index.html">대시보드 →</a>
+  </div>
+
+  <div class="date-row">
+    <label for="entryDate">날짜</label>
+    <input type="date" id="entryDate">
+  </div>
+
+  <!-- 매출 -->
+  <div class="card">
+    <h2>💰 매출</h2>
+    <div class="field"><label>금액 (원)</label><input type="number" id="revAmount" inputmode="numeric" placeholder="예: 1500000"></div>
+    <div class="row2">
+      <div class="field"><label>채널 (선택)</label><input type="text" id="revChannel" placeholder="예: 발주플랫폼"></div>
+      <div class="field"><label>메모 (선택)</label><input type="text" id="revNote"></div>
+    </div>
+    <button class="btn btn-primary" onclick="saveRevenue()">매출 저장</button>
+    <div class="msg" id="revMsg"></div>
+  </div>
+
+  <!-- 원물 입고 -->
+  <div class="card">
+    <h2>📦 원물 입고</h2>
+    <div class="field">
+      <label>품목</label>
+      <select id="rawIntakeItem" onchange="onItemSelectChange('rawIntake')"></select>
+    </div>
+    <div class="new-item-box" id="rawIntakeNewBox">
+      <div class="field"><label>새 품목명</label><input type="text" id="rawIntakeNewName"></div>
+      <div class="row2">
+        <div class="field"><label>단위</label><input type="text" id="rawIntakeNewUnit" value="kg"></div>
+        <div class="field"><label>매입단가(원)</label><input type="number" id="rawIntakeNewCost"></div>
+      </div>
+      <button class="btn btn-ghost" onclick="addItem('원물','rawIntake')">품목 추가</button>
+    </div>
+    <div class="row2">
+      <div class="field"><label>수량</label><input type="number" id="rawIntakeQty" inputmode="decimal"></div>
+      <div class="field"><label>단가(원, 선택)</label><input type="number" id="rawIntakeUnitCost"></div>
+    </div>
+    <div class="field"><label>메모 (선택)</label><input type="text" id="rawIntakeNote"></div>
+    <button class="btn btn-primary" onclick="saveMovement('원물','입고','rawIntake')">원물 입고 저장</button>
+    <div class="msg" id="rawIntakeMsg"></div>
+  </div>
+
+  <!-- 출하 -->
+  <div class="card">
+    <h2>🚚 출하</h2>
+    <div class="field">
+      <label>품목</label>
+      <select id="shipItem" onchange="onItemSelectChange('ship')"></select>
+    </div>
+    <div class="new-item-box" id="shipNewBox">
+      <div class="field"><label>새 품목명</label><input type="text" id="shipNewName"></div>
+      <div class="row2">
+        <div class="field"><label>단위</label><input type="text" id="shipNewUnit" value="kg"></div>
+        <div class="field"><label>매입단가(원)</label><input type="number" id="shipNewCost"></div>
+      </div>
+      <button class="btn btn-ghost" onclick="addItem('원물','ship')">품목 추가</button>
+    </div>
+    <div class="field"><label>수량</label><input type="number" id="shipQty" inputmode="decimal"></div>
+    <div class="field"><label>메모 (선택)</label><input type="text" id="shipNote"></div>
+    <button class="btn btn-primary" onclick="saveMovement('원물','출하','ship')">출하 저장</button>
+    <div class="msg" id="shipMsg"></div>
+  </div>
+
+  <!-- 폐기 -->
+  <div class="card">
+    <h2>🗑️ 폐기</h2>
+    <div class="field">
+      <label>품목</label>
+      <select id="wasteItem" onchange="onItemSelectChange('waste')"></select>
+    </div>
+    <div class="new-item-box" id="wasteNewBox">
+      <div class="field"><label>새 품목명</label><input type="text" id="wasteNewName"></div>
+      <div class="row2">
+        <div class="field"><label>단위</label><input type="text" id="wasteNewUnit" value="kg"></div>
+        <div class="field"><label>매입단가(원)</label><input type="number" id="wasteNewCost"></div>
+      </div>
+      <button class="btn btn-ghost" onclick="addItem('원물','waste')">품목 추가</button>
+    </div>
+    <div class="field"><label>수량</label><input type="number" id="wasteQty" inputmode="decimal"></div>
+    <div class="field"><label>폐기 사유 (선택)</label><input type="text" id="wasteNote" placeholder="예: 상품성 저하"></div>
+    <button class="btn btn-primary" onclick="saveMovement('원물','폐기','waste')">폐기 저장</button>
+    <div class="msg" id="wasteMsg"></div>
+  </div>
+
+  <!-- 박스 입출고 -->
+  <div class="card">
+    <h2>📥 박스 입출고</h2>
+    <div class="field">
+      <label>박스 종류</label>
+      <select id="boxItem" onchange="onItemSelectChange('box')"></select>
+    </div>
+    <div class="new-item-box" id="boxNewBox">
+      <div class="field"><label>새 박스종류명</label><input type="text" id="boxNewName"></div>
+      <div class="row2">
+        <div class="field"><label>단위</label><input type="text" id="boxNewUnit" value="개"></div>
+        <div class="field"><label>단가(원)</label><input type="number" id="boxNewCost"></div>
+      </div>
+      <button class="btn btn-ghost" onclick="addItem('박스','box')">박스종류 추가</button>
+    </div>
+    <div class="row2">
+      <div class="field"><label>구분</label>
+        <select id="boxDirection">
+          <option value="입고">입고</option>
+          <option value="출하">출고</option>
+        </select>
+      </div>
+      <div class="field"><label>수량</label><input type="number" id="boxQty" inputmode="decimal"></div>
+    </div>
+    <div class="field"><label>메모 (선택)</label><input type="text" id="boxNote"></div>
+    <button class="btn btn-primary" onclick="saveBoxMovement()">박스 입출고 저장</button>
+    <div class="msg" id="boxMsg"></div>
+  </div>
+
+  <!-- 오늘 입력 내역 -->
+  <div class="card">
+    <h2>📋 이 날짜에 입력한 내역</h2>
+    <div class="today-log" id="todayLog">아직 없음</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+  const { createClient } = supabase;
+  let db = null;
+  try{
+    db = createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey);
+  }catch(e){
+    document.querySelector('.wrap').innerHTML =
+      '<div class="topbar"><h1>오늘 입력</h1></div><div class="card" style="color:#dc2626;">' +
+      'config.js에 Supabase URL/anon key가 아직 설정되지 않았습니다.<br>README.md의 1단계를 먼저 진행해주세요.</div>';
+    throw e;
+  }
+
+  let itemsCache = []; // {id, name, category, unit, cost_price}
+
+  function todayStr(){
+    const d = new Date();
+    const tz = d.getTimezoneOffset() * 60000;
+    return new Date(d - tz).toISOString().slice(0,10);
+  }
+
+  document.getElementById('entryDate').value = todayStr();
+
+  function showToast(text){
+    const t = document.getElementById('toast');
+    t.textContent = text;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  function setMsg(id, text, ok){
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+
+  async function loadItems(){
+    const { data, error } = await db.from('items').select('*').eq('active', true).order('name');
+    if(error){ console.error(error); return; }
+    itemsCache = data || [];
+    fillSelect('rawIntakeItem', '원물');
+    fillSelect('shipItem', '원물');
+    fillSelect('wasteItem', '원물');
+    fillSelect('boxItem', '박스');
+  }
+
+  function fillSelect(selectId, category){
+    const sel = document.getElementById(selectId);
+    const current = sel.value;
+    sel.innerHTML = '';
+    itemsCache.filter(i => i.category === category).forEach(i => {
+      const opt = document.createElement('option');
+      opt.value = i.id;
+      opt.textContent = `${i.name} (${i.unit})`;
+      sel.appendChild(opt);
+    });
+    const newOpt = document.createElement('option');
+    newOpt.value = '__new__';
+    newOpt.textContent = '+ 새 품목 추가';
+    sel.appendChild(newOpt);
+    if(current && [...sel.options].some(o => o.value === current)) sel.value = current;
+  }
+
+  function onItemSelectChange(prefix){
+    const sel = document.getElementById(prefix + 'Item');
+    const box = document.getElementById(prefix + 'NewBox');
+    box.classList.toggle('open', sel.value === '__new__');
+  }
+
+  async function addItem(category, prefix){
+    const name = document.getElementById(prefix + 'NewName').value.trim();
+    const unit = document.getElementById(prefix + 'NewUnit').value.trim() || '개';
+    const cost = Number(document.getElementById(prefix + 'NewCost').value) || 0;
+    if(!name){ setMsg(prefix + 'Msg', '품목명을 입력하세요', false); return; }
+    const { data, error } = await db.from('items').insert({
+      name, category, unit, cost_price: cost, sale_price: 0
+    }).select().single();
+    if(error){ setMsg(prefix + 'Msg', '추가 실패: ' + error.message, false); return; }
+    itemsCache.push(data);
+    fillSelect(prefix + 'Item', category);
+    document.getElementById(prefix + 'Item').value = data.id;
+    document.getElementById(prefix + 'NewBox').classList.remove('open');
+    showToast(`"${name}" 품목 추가됨`);
+  }
+
+  async function saveRevenue(){
+    const date = document.getElementById('entryDate').value;
+    const amount = Number(document.getElementById('revAmount').value);
+    const channel = document.getElementById('revChannel').value.trim() || null;
+    const note = document.getElementById('revNote').value.trim() || null;
+    if(!date || !amount){ setMsg('revMsg', '날짜와 금액을 입력하세요', false); return; }
+    const { error } = await db.from('daily_revenue').insert({ revenue_date: date, amount, channel, note });
+    if(error){ setMsg('revMsg', '저장 실패: ' + error.message, false); return; }
+    setMsg('revMsg', '저장됨', true);
+    document.getElementById('revAmount').value = '';
+    document.getElementById('revChannel').value = '';
+    document.getElementById('revNote').value = '';
+    showToast('매출 저장됨');
+    refreshTodayLog();
+  }
+
+  async function saveMovement(category, movementType, prefix){
+    const date = document.getElementById('entryDate').value;
+    const itemId = document.getElementById(prefix + 'Item').value;
+    const qty = Number(document.getElementById(prefix + 'Qty').value);
+    const unitCostEl = document.getElementById(prefix + 'UnitCost');
+    const unitCost = unitCostEl ? (Number(unitCostEl.value) || null) : null;
+    const note = document.getElementById(prefix + 'Note').value.trim() || null;
+    if(!date || !itemId || itemId === '__new__' || !qty){
+      setMsg(prefix + 'Msg', '품목과 수량을 입력하세요', false); return;
+    }
+    const { error } = await db.from('stock_movements').insert({
+      movement_date: date, item_id: itemId, movement_type: movementType, quantity: qty, unit_cost: unitCost, note
+    });
+    if(error){ setMsg(prefix + 'Msg', '저장 실패: ' + error.message, false); return; }
+    setMsg(prefix + 'Msg', '저장됨', true);
+    document.getElementById(prefix + 'Qty').value = '';
+    if(unitCostEl) unitCostEl.value = '';
+    document.getElementById(prefix + 'Note').value = '';
+    showToast(`${movementType} 저장됨`);
+    refreshTodayLog();
+  }
+
+  async function saveBoxMovement(){
+    const date = document.getElementById('entryDate').value;
+    const itemId = document.getElementById('boxItem').value;
+    const direction = document.getElementById('boxDirection').value;
+    const qty = Number(document.getElementById('boxQty').value);
+    const note = document.getElementById('boxNote').value.trim() || null;
+    if(!date || !itemId || itemId === '__new__' || !qty){
+      setMsg('boxMsg', '박스종류와 수량을 입력하세요', false); return;
+    }
+    const { error } = await db.from('stock_movements').insert({
+      movement_date: date, item_id: itemId, movement_type: direction, quantity: qty, note
+    });
+    if(error){ setMsg('boxMsg', '저장 실패: ' + error.message, false); return; }
+    setMsg('boxMsg', '저장됨', true);
+    document.getElementById('boxQty').value = '';
+    document.getElementById('boxNote').value = '';
+    showToast('박스 ' + direction + ' 저장됨');
+    refreshTodayLog();
+  }
+
+  async function refreshTodayLog(){
+    const date = document.getElementById('entryDate').value;
+    const [rev, mov] = await Promise.all([
+      db.from('daily_revenue').select('*').eq('revenue_date', date).order('created_at', { ascending: false }),
+      db.from('stock_movements').select('*, items(name,category,unit)').eq('movement_date', date).order('created_at', { ascending: false }),
+    ]);
+    const rows = [];
+    (rev.data || []).forEach(r => rows.push(`매출  ${Number(r.amount).toLocaleString('ko-KR')}원${r.channel ? ' · ' + r.channel : ''}`));
+    (mov.data || []).forEach(m => {
+      const it = m.items;
+      rows.push(`${m.movement_type}  ${it ? it.name : ''} ${m.quantity}${it ? it.unit : ''}`);
+    });
+    const el = document.getElementById('todayLog');
+    el.innerHTML = rows.length
+      ? rows.map(r => `<div class="item"><span>${r}</span></div>`).join('')
+      : '아직 없음';
+  }
+
+  document.getElementById('entryDate').addEventListener('change', refreshTodayLog);
+
+  loadItems().then(refreshTodayLog);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>재고·순이익 대시보드</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+<style>
+  :root{
+    --blue:#2563eb;
+    --blue-dark:#1d4ed8;
+    --blue-light:#bfdbfe;
+    --blue-bg:#eff6ff;
+    --green:#16a34a;
+    --green-bg:#f0fdf4;
+    --red:#dc2626;
+    --text:#0f172a;
+    --sub:#64748b;
+    --line:#e5e7eb;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:#ffffff;
+    color:var(--text);
+    font-family:'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;
+  }
+  .wrap{ max-width:1120px; margin:0 auto; padding:24px 16px 60px; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+  h1{ font-size:22px; font-weight:700; margin:0; }
+  a.input-link{
+    font-size:13px; color:#fff; background:var(--blue); text-decoration:none; font-weight:600;
+    padding:8px 14px; border-radius:99px;
+  }
+  .card{
+    background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px;
+    box-shadow:0 1px 3px rgba(15,23,42,0.04);
+  }
+  .cards{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+  .card-label{ font-size:13px; color:var(--sub); font-weight:600; margin-bottom:8px; }
+  .card-value{ font-size:26px; font-weight:700; }
+  .card-value.neg{ color:var(--red); }
+  .card-sub{ font-size:12px; color:var(--sub); margin-top:6px; }
+
+  .mid{ display:grid; grid-template-columns:1.4fr 1fr; gap:14px; margin-bottom:20px; }
+  .panel-title{ font-size:15px; font-weight:700; margin-bottom:14px; }
+  .legend{ display:flex; gap:14px; font-size:12px; color:var(--sub); margin-bottom:10px; }
+  .legend span{ display:inline-flex; align-items:center; gap:5px; }
+  .dot{ width:9px; height:9px; border-radius:99px; display:inline-block; }
+
+  .bottom{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .stock-row{ display:flex; align-items:center; gap:10px; padding:7px 0; }
+  .stock-name{ width:120px; flex-shrink:0; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .stock-bar-track{ flex:1; height:9px; background:var(--blue-bg); border-radius:99px; overflow:hidden; }
+  .stock-bar-fill{ height:100%; background:var(--blue); border-radius:99px; }
+  .stock-amount{ width:80px; flex-shrink:0; text-align:right; font-size:12px; font-weight:700; color:var(--blue-dark); }
+
+  table.waste-table{ width:100%; border-collapse:collapse; font-size:13px; }
+  table.waste-table th{ text-align:left; color:var(--sub); font-weight:600; padding:6px 4px; border-bottom:1px solid var(--line); font-size:12px; }
+  table.waste-table td{ padding:7px 4px; border-bottom:1px solid var(--line); }
+  table.waste-table tr:last-child td{ border-bottom:none; }
+
+  .loading, .error-box, .empty-box{ color:var(--sub); font-size:14px; padding:30px 0; text-align:center; }
+  .error-box{ color:var(--red); }
+
+  @media (max-width:900px){
+    .cards{ grid-template-columns:repeat(2,1fr); }
+    .mid{ grid-template-columns:1fr; }
+  }
+  @media (max-width:560px){
+    .cards{ grid-template-columns:1fr; }
+    .bottom{ grid-template-columns:1fr; }
+    .card-value{ font-size:22px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="app">
+  <div class="topbar">
+    <h1>재고·순이익 대시보드</h1>
+    <a class="input-link" href="input.html">+ 오늘 입력</a>
+  </div>
+
+  <div class="cards">
+    <div class="card" id="cardRevenue"><div class="loading">불러오는 중...</div></div>
+    <div class="card" id="cardProfit"><div class="loading">불러오는 중...</div></div>
+    <div class="card" id="cardRaw"><div class="loading">불러오는 중...</div></div>
+    <div class="card" id="cardBox"><div class="loading">불러오는 중...</div></div>
+  </div>
+
+  <div class="mid">
+    <div class="card">
+      <div class="panel-title">최근 30일 매출 / 순이익 추이</div>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--blue)"></span>매출</span>
+        <span><span class="dot" style="background:var(--green)"></span>순이익</span>
+      </div>
+      <div id="trendChart"><div class="loading">불러오는 중...</div></div>
+    </div>
+    <div class="card">
+      <div class="panel-title">최근 폐기 내역</div>
+      <div id="wasteTable"><div class="loading">불러오는 중...</div></div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="card">
+      <div class="panel-title">원물 재고 현황</div>
+      <div id="rawStock"><div class="loading">불러오는 중...</div></div>
+    </div>
+    <div class="card">
+      <div class="panel-title">박스 재고 현황</div>
+      <div id="boxStock"><div class="loading">불러오는 중...</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+  const { createClient } = supabase;
+  let db = null;
+  try{
+    db = createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey);
+  }catch(e){
+    document.getElementById('app').innerHTML =
+      `<div class="topbar"><h1>재고·순이익 대시보드</h1></div>
+       <div class="card error-box">config.js에 Supabase URL/anon key가 아직 설정되지 않았습니다.<br>README.md의 1단계를 먼저 진행해주세요.</div>`;
+    throw e;
+  }
+
+  function fmt(n){ return Number(n || 0).toLocaleString('ko-KR'); }
+  function todayStr(){
+    const d = new Date();
+    const tz = d.getTimezoneOffset() * 60000;
+    return new Date(d - tz).toISOString().slice(0,10);
+  }
+
+  function renderCards(summaryRows, stockRows){
+    const today = todayStr();
+    const todayRow = summaryRows.find(r => r.date === today) || { revenue: 0, net_profit: 0 };
+    const rawTotal = stockRows.filter(s => s.category === '원물').reduce((a, s) => a + Number(s.current_stock), 0);
+    const boxTotal = stockRows.filter(s => s.category === '박스').reduce((a, s) => a + Number(s.current_stock), 0);
+
+    document.getElementById('cardRevenue').innerHTML = `
+      <div class="card-label">오늘 매출</div>
+      <div class="card-value">${fmt(todayRow.revenue)}원</div>
+      <div class="card-sub">${today}</div>`;
+
+    document.getElementById('cardProfit').innerHTML = `
+      <div class="card-label">오늘 순이익</div>
+      <div class="card-value ${todayRow.net_profit < 0 ? 'neg' : ''}">${fmt(todayRow.net_profit)}원</div>
+      <div class="card-sub">매출 - 출하원가 - 폐기손실</div>`;
+
+    document.getElementById('cardRaw').innerHTML = `
+      <div class="card-label">원물 재고 총량</div>
+      <div class="card-value">${fmt(rawTotal)}</div>
+      <div class="card-sub">전 품목 합계 (단위 혼재)</div>`;
+
+    document.getElementById('cardBox').innerHTML = `
+      <div class="card-label">박스 재고 총량</div>
+      <div class="card-value">${fmt(boxTotal)}개</div>
+      <div class="card-sub">전 박스종류 합계</div>`;
+  }
+
+  function renderTrendChart(rows){
+    const el = document.getElementById('trendChart');
+    if(!rows.length){ el.innerHTML = '<div class="empty-box">아직 데이터가 없습니다. "오늘 입력"에서 매출을 입력해보세요.</div>'; return; }
+
+    const W = 640, H = 260, padL = 50, padR = 16, padT = 16, padB = 30;
+    const innerW = W - padL - padR, innerH = H - padT - padB;
+    const n = rows.length;
+    const allVals = rows.flatMap(r => [Number(r.revenue), Number(r.net_profit)]);
+    const maxVal = Math.max(...allVals, 1) * 1.15;
+    const minVal = Math.min(0, ...allVals) * 1.15;
+    const range = maxVal - minVal || 1;
+    const stepX = n > 1 ? innerW / (n - 1) : 0;
+
+    function xAt(i){ return padL + stepX * i; }
+    function yAt(v){ return padT + innerH - ((v - minVal) / range) * innerH; }
+
+    const revPts = rows.map((r, i) => `${xAt(i)},${yAt(Number(r.revenue))}`).join(' ');
+    const profitPts = rows.map((r, i) => `${xAt(i)},${yAt(Number(r.net_profit))}`).join(' ');
+    const zeroY = yAt(0);
+
+    let labels = '';
+    const labelEvery = Math.ceil(n / 6);
+    rows.forEach((r, i) => {
+      if(i % labelEvery === 0 || i === n - 1){
+        labels += `<text x="${xAt(i)}" y="${padT+innerH+18}" text-anchor="middle" font-size="10" fill="#94a3b8">${r.date.slice(5)}</text>`;
+      }
+    });
+
+    const svg = `
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" xmlns="http://www.w3.org/2000/svg">
+        <line x1="${padL}" y1="${zeroY}" x2="${padL+innerW}" y2="${zeroY}" stroke="#e2e8f0" stroke-width="1"></line>
+        <polyline points="${revPts}" fill="none" stroke="var(--blue)" stroke-width="2"></polyline>
+        <polyline points="${profitPts}" fill="none" stroke="var(--green)" stroke-width="2"></polyline>
+        ${labels}
+      </svg>`;
+    el.innerHTML = svg;
+  }
+
+  function renderStock(containerId, rows){
+    const el = document.getElementById(containerId);
+    if(!rows.length){ el.innerHTML = '<div class="empty-box">등록된 품목이 없습니다.</div>'; return; }
+    const max = Math.max(...rows.map(r => Number(r.current_stock)), 1);
+    el.innerHTML = rows.map(r => `
+      <div class="stock-row">
+        <span class="stock-name">${r.name}</span>
+        <div class="stock-bar-track"><div class="stock-bar-fill" style="width:${Math.max(0, Number(r.current_stock)/max*100).toFixed(1)}%"></div></div>
+        <span class="stock-amount">${fmt(r.current_stock)}${r.unit}</span>
+      </div>`).join('');
+  }
+
+  function renderWasteTable(rows){
+    const el = document.getElementById('wasteTable');
+    if(!rows.length){ el.innerHTML = '<div class="empty-box">최근 폐기 내역이 없습니다.</div>'; return; }
+    el.innerHTML = `
+      <table class="waste-table">
+        <thead><tr><th>날짜</th><th>품목</th><th>수량</th><th>사유</th></tr></thead>
+        <tbody>
+          ${rows.map(r => `<tr>
+            <td>${r.movement_date}</td>
+            <td>${r.items ? r.items.name : ''}</td>
+            <td>${fmt(r.quantity)}${r.items ? r.items.unit : ''}</td>
+            <td>${r.note || '-'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  async function loadDashboard(){
+    try{
+      const since = new Date(Date.now() - 29*86400000);
+      const sinceStr = new Date(since - since.getTimezoneOffset()*60000).toISOString().slice(0,10);
+
+      const [summary, stock, waste] = await Promise.all([
+        db.from('v_daily_summary').select('*').gte('date', sinceStr).order('date', { ascending: true }),
+        db.from('v_stock_current').select('*').order('current_stock', { ascending: false }),
+        db.from('stock_movements').select('*, items(name,unit)').eq('movement_type', '폐기').order('movement_date', { ascending: false }).limit(10),
+      ]);
+      if(summary.error) throw summary.error;
+      if(stock.error) throw stock.error;
+      if(waste.error) throw waste.error;
+
+      renderCards(summary.data || [], stock.data || []);
+      renderTrendChart(summary.data || []);
+      renderStock('rawStock', (stock.data || []).filter(s => s.category === '원물'));
+      renderStock('boxStock', (stock.data || []).filter(s => s.category === '박스'));
+      renderWasteTable(waste.data || []);
+    }catch(err){
+      console.error(err);
+      document.getElementById('app').innerHTML =
+        `<div class="topbar"><h1>재고·순이익 대시보드</h1><a class="input-link" href="input.html">+ 오늘 입력</a></div>
+         <div class="card error-box">데이터를 불러오지 못했습니다.<br>${(err && err.message) ? err.message : err}<br><br>
+         config.js에 Supabase URL/anon key가 올바르게 설정되어 있는지 확인해주세요.</div>`;
+    }
+  }
+
+  loadDashboard();
+</script>
+
+</body>
+</html>
