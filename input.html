@@ -63,8 +63,14 @@
   }
   .new-item-box.open{ display:block; }
   .today-log{ font-size:13px; color:var(--sub); }
-  .today-log .item{ display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--line); }
+  .today-log .item{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px solid var(--line); }
   .today-log .item:last-child{ border-bottom:none; }
+  .today-log .item span:first-child{ flex:1; min-width:0; }
+  .row-actions{ display:flex; gap:2px; flex-shrink:0; }
+  .icon-btn{
+    border:none; background:transparent; font-size:15px; padding:4px 6px; cursor:pointer; border-radius:6px; line-height:1;
+  }
+  .icon-btn:active{ background:var(--blue-bg); }
   .toast{
     position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
     background:#0f172a; color:#fff; padding:10px 18px; border-radius:99px; font-size:13px;
@@ -353,15 +359,62 @@
       db.from('stock_movements').select('*, items(name,category,unit)').eq('movement_date', date).order('created_at', { ascending: false }),
     ]);
     const rows = [];
-    (rev.data || []).forEach(r => rows.push(`매출  ${Number(r.amount).toLocaleString('ko-KR')}원${r.channel ? ' · ' + r.channel : ''}`));
+    (rev.data || []).forEach(r => {
+      const label = `매출  ${Number(r.amount).toLocaleString('ko-KR')}원${r.channel ? ' · ' + r.channel : ''}${r.note ? ' · ' + r.note : ''}`;
+      rows.push(rowHtml(label, () => editRevenue(r), () => removeRow('daily_revenue', r.id)));
+    });
     (mov.data || []).forEach(m => {
       const it = m.items;
-      rows.push(`${m.movement_type}  ${it ? it.name : ''} ${m.quantity}${it ? it.unit : ''}`);
+      const label = `${m.movement_type}  ${it ? it.name : ''} ${m.quantity}${it ? it.unit : ''}${m.note ? ' · ' + m.note : ''}`;
+      rows.push(rowHtml(label, () => editMovement(m), () => removeRow('stock_movements', m.id)));
     });
     const el = document.getElementById('todayLog');
-    el.innerHTML = rows.length
-      ? rows.map(r => `<div class="item"><span>${r}</span></div>`).join('')
-      : '아직 없음';
+    el.innerHTML = rows.length ? rows.join('') : '아직 없음';
+  }
+
+  function rowHtml(label, onEdit, onDelete){
+    const id = 'row_' + Math.random().toString(36).slice(2);
+    setTimeout(() => {
+      document.getElementById(id + '_edit').onclick = onEdit;
+      document.getElementById(id + '_del').onclick = onDelete;
+    }, 0);
+    return `<div class="item">
+      <span>${label}</span>
+      <span class="row-actions">
+        <button type="button" class="icon-btn" id="${id}_edit">✏️</button>
+        <button type="button" class="icon-btn" id="${id}_del">🗑️</button>
+      </span>
+    </div>`;
+  }
+
+  async function removeRow(table, id){
+    if(!confirm('이 내역을 삭제할까요?')) return;
+    const { error } = await db.from(table).delete().eq('id', id);
+    if(error){ alert('삭제 실패: ' + error.message); return; }
+    showToast('삭제됨');
+    refreshTodayLog();
+  }
+
+  async function editRevenue(r){
+    const newAmount = prompt('새 매출 금액(원)을 입력하세요', r.amount);
+    if(newAmount === null) return;
+    const amount = Number(newAmount);
+    if(!amount || amount < 0){ alert('올바른 금액을 입력하세요'); return; }
+    const { error } = await db.from('daily_revenue').update({ amount }).eq('id', r.id);
+    if(error){ alert('수정 실패: ' + error.message); return; }
+    showToast('수정됨');
+    refreshTodayLog();
+  }
+
+  async function editMovement(m){
+    const newQty = prompt('새 수량을 입력하세요', m.quantity);
+    if(newQty === null) return;
+    const quantity = Number(newQty);
+    if(!quantity || quantity < 0){ alert('올바른 수량을 입력하세요'); return; }
+    const { error } = await db.from('stock_movements').update({ quantity }).eq('id', m.id);
+    if(error){ alert('수정 실패: ' + error.message); return; }
+    showToast('수정됨');
+    refreshTodayLog();
   }
 
   document.getElementById('entryDate').addEventListener('change', refreshTodayLog);
