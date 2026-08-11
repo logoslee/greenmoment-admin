@@ -44,6 +44,14 @@
   .card-value.neg{ color:var(--red); }
   .card-sub{ font-size:12px; color:var(--sub); margin-top:6px; }
 
+  .period-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .period-label{ font-size:12px; color:var(--sub); font-weight:600; margin-bottom:6px; }
+  .period-value{ font-size:20px; font-weight:700; }
+  .period-value.neg{ color:var(--red); }
+  @media (max-width:560px){
+    .period-grid{ grid-template-columns:repeat(2,1fr); gap:16px; }
+  }
+
   .mid{ display:grid; grid-template-columns:1.4fr 1fr; gap:14px; margin-bottom:20px; }
   .panel-title{ font-size:15px; font-weight:700; margin-bottom:14px; }
   .legend{ display:flex; gap:14px; font-size:12px; color:var(--sub); margin-bottom:10px; }
@@ -95,6 +103,11 @@
     <div class="card" id="cardBox"><div class="loading">불러오는 중...</div></div>
   </div>
 
+  <div class="card" style="margin-bottom:20px;">
+    <div class="panel-title">기간별 순이익</div>
+    <div class="period-grid" id="periodProfit"><div class="loading">불러오는 중...</div></div>
+  </div>
+
   <div class="mid">
     <div class="card">
       <div class="panel-title">최근 30일 매출 / 순이익 추이</div>
@@ -141,6 +154,35 @@
     const d = new Date();
     const tz = d.getTimezoneOffset() * 60000;
     return new Date(d - tz).toISOString().slice(0,10);
+  }
+  function dateStrDaysAgo(n){
+    const d = new Date(Date.now() - n*86400000);
+    const tz = d.getTimezoneOffset() * 60000;
+    return new Date(d - tz).toISOString().slice(0,10);
+  }
+
+  function renderPeriodProfit(summaryRows){
+    const today = todayStr();
+    const yesterday = dateStrDaysAgo(1);
+    const weekStart = dateStrDaysAgo(6);
+
+    const todayProfit = summaryRows.find(r => r.date === today)?.net_profit || 0;
+    const yesterdayProfit = summaryRows.find(r => r.date === yesterday)?.net_profit || 0;
+    const weekProfit = summaryRows.filter(r => r.date >= weekStart && r.date <= today)
+      .reduce((a, r) => a + Number(r.net_profit), 0);
+    const monthProfit = summaryRows.reduce((a, r) => a + Number(r.net_profit), 0);
+
+    const items = [
+      ['오늘', todayProfit],
+      ['어제', yesterdayProfit],
+      ['최근 7일', weekProfit],
+      ['최근 30일', monthProfit],
+    ];
+    document.getElementById('periodProfit').innerHTML = items.map(([label, v]) => `
+      <div>
+        <div class="period-label">${label}</div>
+        <div class="period-value ${v < 0 ? 'neg' : ''}">${fmt(v)}원</div>
+      </div>`).join('');
   }
 
   function renderCards(summaryRows, stockRows){
@@ -267,6 +309,7 @@
       if(waste.error) throw waste.error;
 
       renderCards(summary.data || [], stock.data || []);
+      renderPeriodProfit(summary.data || []);
       renderTrendChart(summary.data || []);
       renderStock('rawStock', (stock.data || []).filter(s => s.category === '원물'));
       renderStock('boxStock', (stock.data || []).filter(s => s.category === '박스'));
