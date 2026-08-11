@@ -73,7 +73,7 @@
   .legend span{ display:inline-flex; align-items:center; gap:5px; }
   .dot{ width:9px; height:9px; border-radius:99px; display:inline-block; }
 
-  .bottom{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .bottom{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
   .stock-row{ display:flex; align-items:center; gap:10px; padding:7px 0; }
   .stock-name{ width:120px; flex-shrink:0; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .stock-bar-track{ flex:1; height:9px; background:var(--blue-bg); border-radius:99px; overflow:hidden; }
@@ -91,6 +91,7 @@
   @media (max-width:900px){
     .cards{ grid-template-columns:repeat(2,1fr); }
     .mid{ grid-template-columns:1fr; }
+    .bottom{ grid-template-columns:1fr 1fr; }
   }
   @media (max-width:560px){
     .cards{ grid-template-columns:1fr; }
@@ -153,6 +154,10 @@
     <div class="card">
       <div class="panel-title">박스 재고 현황</div>
       <div id="boxStock"><div class="loading">불러오는 중...</div></div>
+    </div>
+    <div class="card">
+      <div class="panel-title">부자재 재고 현황</div>
+      <div id="supplyStock"><div class="loading">불러오는 중...</div></div>
     </div>
   </div>
 </div>
@@ -234,7 +239,7 @@
   function renderCards(summaryRows, stockRows){
     const today = todayStr();
     const todayRow = summaryRows.find(r => r.date === today) || {
-      revenue: 0, net_profit: 0, raw_cogs: 0, box_cost: 0, waste_cost: 0, shipping_cost: 0, other_cost: 0, labor_cost: 0
+      revenue: 0, net_profit: 0, raw_cogs: 0, box_cost: 0, supply_cost: 0, waste_cost: 0, shipping_cost: 0, other_cost: 0, labor_cost: 0
     };
     const rawTotal = stockRows.filter(s => s.category === '원물').reduce((a, s) => a + Number(s.current_stock), 0);
     const boxTotal = stockRows.filter(s => s.category === '박스').reduce((a, s) => a + Number(s.current_stock), 0);
@@ -247,6 +252,7 @@
     const costParts = [
       ['원물원가', todayRow.raw_cogs],
       ['박스비', todayRow.box_cost],
+      ['부자재비', todayRow.supply_cost],
       ['폐기손실', todayRow.waste_cost],
       ['택배비', todayRow.shipping_cost],
       ['인건비', todayRow.labor_cost],
@@ -259,7 +265,7 @@
     document.getElementById('cardProfit').innerHTML = `
       <div class="card-label">오늘 순이익</div>
       <div class="card-value ${todayRow.net_profit < 0 ? 'neg' : ''}">${fmt(todayRow.net_profit)}원</div>
-      <div class="card-sub">매출 - (원물원가+박스비+폐기+택배비+인건비+기타)</div>
+      <div class="card-sub">매출 - (원물원가+박스비+부자재비+폐기+택배비+인건비+기타)</div>
       <div class="card-sub">${costBreakdown}</div>`;
 
     document.getElementById('cardRaw').innerHTML = `
@@ -359,6 +365,7 @@
       renderTrendChart(summary.data || []);
       renderStock('rawStock', (stock.data || []).filter(s => s.category === '원물'));
       renderStock('boxStock', (stock.data || []).filter(s => s.category === '박스'));
+      renderStock('supplyStock', (stock.data || []).filter(s => s.category === '부자재'));
       renderWasteTable(waste.data || []);
     }catch(err){
       console.error(err);

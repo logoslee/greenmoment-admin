@@ -63,6 +63,7 @@
       <select id="newCategory">
         <option value="원물">원물</option>
         <option value="박스">박스</option>
+        <option value="부자재">부자재</option>
       </select>
     </div>
     <div class="field"><label>품목명</label><input type="text" id="newName" placeholder="예: 거봉 5kg"></div>
@@ -71,6 +72,7 @@
       <div class="field"><label>매입단가</label><input type="number" id="newCost" placeholder="0"></div>
       <div class="field"><label>판매단가</label><input type="number" id="newSale" placeholder="0"></div>
     </div>
+    <div class="field"><label>초기 재고 수량 (선택 — 지금 창고에 있는 만큼)</label><input type="number" id="newStock" placeholder="0"></div>
     <button class="btn btn-primary" onclick="createItem()">품목 추가</button>
     <div class="msg" id="createMsg"></div>
   </div>
@@ -78,6 +80,7 @@
   <div class="tabs">
     <div class="tab active" id="tabRaw" onclick="switchTab('원물')">원물</div>
     <div class="tab" id="tabBox" onclick="switchTab('박스')">박스</div>
+    <div class="tab" id="tabSupply" onclick="switchTab('부자재')">부자재</div>
   </div>
 
   <div class="card">
@@ -112,6 +115,7 @@
     currentTab = category;
     document.getElementById('tabRaw').classList.toggle('active', category === '원물');
     document.getElementById('tabBox').classList.toggle('active', category === '박스');
+    document.getElementById('tabSupply').classList.toggle('active', category === '부자재');
     document.getElementById('listTitle').textContent = category + ' 품목';
     renderList();
   }
@@ -155,6 +159,7 @@
             <div class="field"><label>매입단가</label><input type="number" id="cost_${i.id}" value="${i.cost_price}"></div>
             <div class="field"><label>판매단가</label><input type="number" id="sale_${i.id}" value="${i.sale_price}"></div>
           </div>
+          <div class="field"><label>현재 재고 수량 (직접 고치면 그 값으로 맞춰집니다)</label><input type="number" id="stock_${i.id}" value="${stockMap[i.id] || 0}"></div>
           <div class="item-edit-actions">
             <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveItem(${i.id})">저장</button>
             <button class="btn btn-ghost btn-sm" onclick="toggleActive(${i.id}, ${!i.active})">${i.active ? '비활성화' : '활성화'}</button>
@@ -176,13 +181,21 @@
     const unit = document.getElementById('newUnit').value.trim() || '개';
     const cost_price = Number(document.getElementById('newCost').value) || 0;
     const sale_price = Number(document.getElementById('newSale').value) || 0;
+    const initialStock = Number(document.getElementById('newStock').value) || 0;
     if(!name){ setMsg('createMsg', '품목명을 입력하세요', false); return; }
-    const { error } = await db.from('items').insert({ category, name, unit, cost_price, sale_price });
+    const { data, error } = await db.from('items').insert({ category, name, unit, cost_price, sale_price }).select().single();
     if(error){ setMsg('createMsg', '추가 실패: ' + error.message, false); return; }
+    if(initialStock > 0){
+      const { error: moveError } = await db.from('stock_movements').insert({
+        item_id: data.id, movement_type: '입고', quantity: initialStock, note: '초기 재고 등록'
+      });
+      if(moveError){ setMsg('createMsg', '품목은 추가됐지만 초기 재고 등록 실패: ' + moveError.message, false); }
+    }
     setMsg('createMsg', '추가됨', true);
     document.getElementById('newName').value = '';
     document.getElementById('newCost').value = '';
     document.getElementById('newSale').value = '';
+    document.getElementById('newStock').value = '';
     switchTab(category);
     loadAll();
   }
@@ -192,9 +205,18 @@
     const unit = document.getElementById('unit_' + id).value.trim() || '개';
     const cost_price = Number(document.getElementById('cost_' + id).value) || 0;
     const sale_price = Number(document.getElementById('sale_' + id).value) || 0;
+    const newStock = Number(document.getElementById('stock_' + id).value) || 0;
+    const oldStock = Number(stockMap[id] || 0);
     if(!name){ setMsg('editMsg_' + id, '품목명을 입력하세요', false); return; }
     const { error } = await db.from('items').update({ name, unit, cost_price, sale_price }).eq('id', id);
     if(error){ setMsg('editMsg_' + id, '저장 실패: ' + error.message, false); return; }
+    const delta = newStock - oldStock;
+    if(delta !== 0){
+      const { error: moveError } = await db.from('stock_movements').insert({
+        item_id: id, movement_type: '조정', quantity: delta, note: '품목관리에서 재고 수정'
+      });
+      if(moveError){ setMsg('editMsg_' + id, '품목 정보는 저장됐지만 재고 조정 실패: ' + moveError.message, false); loadAll(); return; }
+    }
     setMsg('editMsg_' + id, '저장됨', true);
     loadAll();
   }

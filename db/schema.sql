@@ -6,13 +6,17 @@
 create table if not exists items (
   id bigint generated always as identity primary key,
   name text not null,
-  category text not null check (category in ('원물', '박스')),
+  category text not null check (category in ('원물', '박스', '부자재')),
   unit text not null default '개',
   sale_price numeric not null default 0,
   cost_price numeric not null default 0,
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+-- 부자재(포장재, 소모품 등) 카테고리 추가 (기존 테이블에 이미 있던 제약을 새로 교체)
+alter table items drop constraint if exists items_category_check;
+alter table items add constraint items_category_check check (category in ('원물', '박스', '부자재'));
 
 create unique index if not exists items_name_category_key on items (name, category);
 
@@ -26,6 +30,10 @@ create table if not exists stock_movements (
   note text,
   created_at timestamptz not null default now()
 );
+
+-- 품목관리에서 재고 수량을 직접 고칠 때는 "조정" 건에 마이너스 값도 허용 (그 외 유형은 0 이상만)
+alter table stock_movements drop constraint if exists stock_movements_quantity_check;
+alter table stock_movements add constraint stock_movements_quantity_check check (quantity >= 0 or movement_type = '조정');
 
 create index if not exists stock_movements_date_idx on stock_movements (movement_date);
 create index if not exists stock_movements_item_idx on stock_movements (item_id);
@@ -97,7 +105,7 @@ where i.active
 group by i.id, i.name, i.category, i.unit;
 
 -- 날짜별 매출 / 비용 항목별 / 순이익
--- 순이익 = 매출 - 원물출하원가 - 폐기손실 - 박스비 - 택배비 - 인건비
+-- 순이익 = 매출 - 원물출하원가 - 박스비 - 부자재비 - 폐기손실 - 택배비 - 인건비 - 기타비용
 -- 기존 v_daily_summary가 다른 컬럼 구성(예: cogs)으로 이미 만들어져 있을 수 있어서,
 -- CREATE OR REPLACE 대신 먼저 지우고 다시 만듭니다 (뷰는 컬럼 이름/개수를 OR REPLACE로 바꿀 수 없음).
 drop view if exists v_daily_summary;
@@ -119,6 +127,13 @@ box_cost as (
   from stock_movements sm
   join items i on i.id = sm.item_id
   where sm.movement_type = '출하' and i.category = '박스'
+  group by sm.movement_date
+),
+supply_cost as (
+  select sm.movement_date as date, sum(sm.quantity * coalesce(sm.unit_cost, i.cost_price)) as supply_cost
+  from stock_movements sm
+  join items i on i.id = sm.item_id
+  where sm.movement_type = '출하' and i.category = '부자재'
   group by sm.movement_date
 ),
 waste as (
@@ -149,6 +164,7 @@ dates as (
   select date from revenue
   union select date from raw_cogs
   union select date from box_cost
+  union select date from supply_cost
   union select date from waste
   union select date from shipping
   union select date from other_costs
@@ -159,6 +175,7 @@ select
   coalesce(r.revenue, 0) as revenue,
   coalesce(rc.raw_cogs, 0) as raw_cogs,
   coalesce(bc.box_cost, 0) as box_cost,
+  coalesce(sc.supply_cost, 0) as supply_cost,
   coalesce(w.waste_cost, 0) as waste_cost,
   coalesce(s.shipping_cost, 0) as shipping_cost,
   coalesce(oc.other_cost, 0) as other_cost,
@@ -166,12 +183,14 @@ select
   coalesce(r.revenue, 0)
     - coalesce(rc.raw_cogs, 0)
     - coalesce(bc.box_cost, 0)
+    - coalesce(sc.supply_cost, 0)
     - coalesce(w.waste_cost, 0)
     - coalesce(s.shipping_cost, 0)
     - coalesce(oc.other_cost, 0)
     - coalesce(l.labor_cost, 0) as net_profit
 from dates d
 left join revenue r on r.date = d.date
+left join supply_cost sc on sc.date = d.date
 left join raw_cogs rc on rc.date = d.date
 left join box_cost bc on bc.date = d.date
 left join waste w on w.date = d.date
