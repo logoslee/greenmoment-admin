@@ -32,6 +32,8 @@
     font-size:13px; color:#fff; background:var(--blue); text-decoration:none; font-weight:600;
     padding:8px 14px; border-radius:99px;
   }
+  a.dash-link{ font-size:13px; color:var(--blue); text-decoration:none; font-weight:600; }
+  .nav-links{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:flex-end; }
   .card{
     background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px;
     box-shadow:0 1px 3px rgba(15,23,42,0.04);
@@ -79,7 +81,11 @@
 <div class="wrap" id="app">
   <div class="topbar">
     <h1>재고·순이익 대시보드</h1>
-    <a class="input-link" href="input.html">+ 오늘 입력</a>
+    <div class="nav-links">
+      <a class="dash-link" href="items.html">품목관리</a>
+      <a class="dash-link" href="labor.html">인건비</a>
+      <a class="input-link" href="input.html">+ 오늘 입력</a>
+    </div>
   </div>
 
   <div class="cards">
@@ -139,7 +145,9 @@
 
   function renderCards(summaryRows, stockRows){
     const today = todayStr();
-    const todayRow = summaryRows.find(r => r.date === today) || { revenue: 0, net_profit: 0 };
+    const todayRow = summaryRows.find(r => r.date === today) || {
+      revenue: 0, net_profit: 0, raw_cogs: 0, box_cost: 0, waste_cost: 0, shipping_cost: 0, other_cost: 0, labor_cost: 0
+    };
     const rawTotal = stockRows.filter(s => s.category === '원물').reduce((a, s) => a + Number(s.current_stock), 0);
     const boxTotal = stockRows.filter(s => s.category === '박스').reduce((a, s) => a + Number(s.current_stock), 0);
 
@@ -148,10 +156,23 @@
       <div class="card-value">${fmt(todayRow.revenue)}원</div>
       <div class="card-sub">${today}</div>`;
 
+    const costParts = [
+      ['원물원가', todayRow.raw_cogs],
+      ['박스비', todayRow.box_cost],
+      ['폐기손실', todayRow.waste_cost],
+      ['택배비', todayRow.shipping_cost],
+      ['인건비', todayRow.labor_cost],
+      ['기타비용', todayRow.other_cost],
+    ].filter(([, v]) => Number(v) > 0);
+    const costBreakdown = costParts.length
+      ? costParts.map(([label, v]) => `${label} ${fmt(v)}`).join(' · ')
+      : '비용 항목 없음';
+
     document.getElementById('cardProfit').innerHTML = `
       <div class="card-label">오늘 순이익</div>
       <div class="card-value ${todayRow.net_profit < 0 ? 'neg' : ''}">${fmt(todayRow.net_profit)}원</div>
-      <div class="card-sub">매출 - 출하원가 - 폐기손실</div>`;
+      <div class="card-sub">매출 - (원물원가+박스비+폐기+택배비+인건비+기타)</div>
+      <div class="card-sub">${costBreakdown}</div>`;
 
     document.getElementById('cardRaw').innerHTML = `
       <div class="card-label">원물 재고 총량</div>

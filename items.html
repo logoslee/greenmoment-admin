@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>품목 관리</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+<style>
+  :root{
+    --blue:#2563eb; --blue-dark:#1d4ed8; --blue-bg:#eff6ff;
+    --text:#0f172a; --sub:#64748b; --line:#e5e7eb; --red:#dc2626; --green:#16a34a;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:#f8fafc; color:var(--text); font-family:'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,sans-serif; }
+  .wrap{ max-width:640px; margin:0 auto; padding:16px 16px 80px; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  h1{ font-size:20px; font-weight:700; margin:0; }
+  .nav-links{ display:flex; gap:10px; }
+  .nav-links a{ font-size:13px; color:var(--blue); text-decoration:none; font-weight:600; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; box-shadow:0 1px 3px rgba(15,23,42,0.04); }
+  .card h2{ font-size:15px; font-weight:700; margin:0 0 12px; }
+  .field{ margin-bottom:10px; }
+  .field label{ display:block; font-size:12px; color:var(--sub); font-weight:600; margin-bottom:4px; }
+  .field input, .field select{ width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font-size:15px; font-family:inherit; background:#fff; }
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .row3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+  .btn{ padding:10px 14px; border:none; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .btn-primary{ background:var(--blue); color:#fff; width:100%; padding:12px; }
+  .btn-sm{ padding:7px 10px; font-size:12px; }
+  .btn-ghost{ background:var(--blue-bg); color:var(--blue-dark); }
+  .btn-danger{ background:#fef2f2; color:var(--red); }
+  .msg{ font-size:12px; margin-top:8px; text-align:center; min-height:16px; }
+  .msg.ok{ color:var(--green); }
+  .msg.err{ color:var(--red); }
+  .tabs{ display:flex; gap:8px; margin-bottom:14px; }
+  .tab{ flex:1; text-align:center; padding:9px; border-radius:10px; background:#fff; border:1px solid var(--line); font-size:13px; font-weight:700; color:var(--sub); cursor:pointer; }
+  .tab.active{ background:var(--blue); color:#fff; border-color:var(--blue); }
+  .item-row{ border-bottom:1px solid var(--line); padding:10px 0; }
+  .item-row:last-child{ border-bottom:none; }
+  .item-summary{ display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; }
+  .item-name{ font-size:14px; font-weight:600; }
+  .item-sub{ font-size:12px; color:var(--sub); margin-top:2px; }
+  .item-summary .icon-btn{ border:none; background:transparent; font-size:15px; padding:4px 6px; cursor:pointer; flex-shrink:0; }
+  .item-edit{ display:none; margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); }
+  .item-edit.open{ display:block; }
+  .item-edit-actions{ display:flex; gap:8px; margin-top:8px; }
+  .inactive-toggle{ font-size:12px; color:var(--blue); background:none; border:none; cursor:pointer; margin-top:6px; padding:0; }
+  .badge-inactive{ font-size:11px; color:var(--sub); background:#f1f5f9; padding:2px 6px; border-radius:6px; margin-left:6px; }
+  .empty-box{ color:var(--sub); font-size:13px; text-align:center; padding:16px 0; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <h1>품목 관리</h1>
+    <div class="nav-links"><a href="input.html">입력</a><a href="index.html">대시보드</a></div>
+  </div>
+
+  <div class="card">
+    <h2>+ 새 품목 추가</h2>
+    <div class="field"><label>카테고리</label>
+      <select id="newCategory">
+        <option value="원물">원물</option>
+        <option value="박스">박스</option>
+      </select>
+    </div>
+    <div class="field"><label>품목명</label><input type="text" id="newName" placeholder="예: 거봉 5kg"></div>
+    <div class="row3">
+      <div class="field"><label>단위</label><input type="text" id="newUnit" value="kg"></div>
+      <div class="field"><label>매입단가</label><input type="number" id="newCost" placeholder="0"></div>
+      <div class="field"><label>판매단가</label><input type="number" id="newSale" placeholder="0"></div>
+    </div>
+    <button class="btn btn-primary" onclick="createItem()">품목 추가</button>
+    <div class="msg" id="createMsg"></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" id="tabRaw" onclick="switchTab('원물')">원물</div>
+    <div class="tab" id="tabBox" onclick="switchTab('박스')">박스</div>
+  </div>
+
+  <div class="card">
+    <h2 id="listTitle">원물 품목</h2>
+    <div id="itemList"><div class="empty-box">불러오는 중...</div></div>
+    <button class="inactive-toggle" id="toggleInactiveBtn" onclick="toggleInactive()">비활성 품목 보기</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+  const { createClient } = supabase;
+  let db = null;
+  try{
+    db = createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey);
+  }catch(e){
+    document.querySelector('.wrap').innerHTML =
+      '<div class="topbar"><h1>품목 관리</h1></div><div class="card" style="color:#dc2626;">' +
+      'config.js에 Supabase URL/anon key가 아직 설정되지 않았습니다.<br>README.md의 1단계를 먼저 진행해주세요.</div>';
+    throw e;
+  }
+
+  let currentTab = '원물';
+  let showInactive = false;
+  let allItems = [];
+  let stockMap = {};
+
+  function fmt(n){ return Number(n || 0).toLocaleString('ko-KR'); }
+
+  function switchTab(category){
+    currentTab = category;
+    document.getElementById('tabRaw').classList.toggle('active', category === '원물');
+    document.getElementById('tabBox').classList.toggle('active', category === '박스');
+    document.getElementById('listTitle').textContent = category + ' 품목';
+    renderList();
+  }
+
+  function toggleInactive(){
+    showInactive = !showInactive;
+    document.getElementById('toggleInactiveBtn').textContent = showInactive ? '활성 품목만 보기' : '비활성 품목 보기';
+    renderList();
+  }
+
+  async function loadAll(){
+    const [itemsRes, stockRes] = await Promise.all([
+      db.from('items').select('*').order('name'),
+      db.from('v_stock_current').select('*'),
+    ]);
+    allItems = itemsRes.data || [];
+    stockMap = {};
+    (stockRes.data || []).forEach(s => stockMap[s.item_id] = s.current_stock);
+    renderList();
+  }
+
+  function renderList(){
+    const el = document.getElementById('itemList');
+    const rows = allItems.filter(i => i.category === currentTab && (showInactive ? true : i.active));
+    if(!rows.length){ el.innerHTML = '<div class="empty-box">등록된 품목이 없습니다.</div>'; return; }
+    el.innerHTML = rows.map(i => `
+      <div class="item-row">
+        <div class="item-summary" onclick="toggleEdit(${i.id})">
+          <div>
+            <div class="item-name">${i.name}${!i.active ? '<span class="badge-inactive">비활성</span>' : ''}</div>
+            <div class="item-sub">매입 ${fmt(i.cost_price)} · 판매 ${fmt(i.sale_price)} · 재고 ${fmt(stockMap[i.id] || 0)}${i.unit}</div>
+          </div>
+          <button type="button" class="icon-btn">✏️</button>
+        </div>
+        <div class="item-edit" id="edit_${i.id}">
+          <div class="row2">
+            <div class="field"><label>품목명</label><input type="text" id="name_${i.id}" value="${i.name}"></div>
+            <div class="field"><label>단위</label><input type="text" id="unit_${i.id}" value="${i.unit}"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>매입단가</label><input type="number" id="cost_${i.id}" value="${i.cost_price}"></div>
+            <div class="field"><label>판매단가</label><input type="number" id="sale_${i.id}" value="${i.sale_price}"></div>
+          </div>
+          <div class="item-edit-actions">
+            <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveItem(${i.id})">저장</button>
+            <button class="btn btn-ghost btn-sm" onclick="toggleActive(${i.id}, ${!i.active})">${i.active ? '비활성화' : '활성화'}</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteItem(${i.id})">삭제</button>
+          </div>
+          <div class="msg" id="editMsg_${i.id}"></div>
+        </div>
+      </div>`).join('');
+  }
+
+  function toggleEdit(id){
+    const el = document.getElementById('edit_' + id);
+    el.classList.toggle('open');
+  }
+
+  async function createItem(){
+    const category = document.getElementById('newCategory').value;
+    const name = document.getElementById('newName').value.trim();
+    const unit = document.getElementById('newUnit').value.trim() || '개';
+    const cost_price = Number(document.getElementById('newCost').value) || 0;
+    const sale_price = Number(document.getElementById('newSale').value) || 0;
+    if(!name){ setMsg('createMsg', '품목명을 입력하세요', false); return; }
+    const { error } = await db.from('items').insert({ category, name, unit, cost_price, sale_price });
+    if(error){ setMsg('createMsg', '추가 실패: ' + error.message, false); return; }
+    setMsg('createMsg', '추가됨', true);
+    document.getElementById('newName').value = '';
+    document.getElementById('newCost').value = '';
+    document.getElementById('newSale').value = '';
+    switchTab(category);
+    loadAll();
+  }
+
+  async function saveItem(id){
+    const name = document.getElementById('name_' + id).value.trim();
+    const unit = document.getElementById('unit_' + id).value.trim() || '개';
+    const cost_price = Number(document.getElementById('cost_' + id).value) || 0;
+    const sale_price = Number(document.getElementById('sale_' + id).value) || 0;
+    if(!name){ setMsg('editMsg_' + id, '품목명을 입력하세요', false); return; }
+    const { error } = await db.from('items').update({ name, unit, cost_price, sale_price }).eq('id', id);
+    if(error){ setMsg('editMsg_' + id, '저장 실패: ' + error.message, false); return; }
+    setMsg('editMsg_' + id, '저장됨', true);
+    loadAll();
+  }
+
+  async function toggleActive(id, newActive){
+    const { error } = await db.from('items').update({ active: newActive }).eq('id', id);
+    if(error){ setMsg('editMsg_' + id, '변경 실패: ' + error.message, false); return; }
+    loadAll();
+  }
+
+  async function deleteItem(id){
+    if(!confirm('이 품목을 완전히 삭제할까요? (입출고 기록이 있으면 삭제할 수 없고, 대신 "비활성화"를 눌러주세요)')) return;
+    const { error } = await db.from('items').delete().eq('id', id);
+    if(error){ setMsg('editMsg_' + id, '삭제 실패 (입출고 기록이 있으면 "비활성화"를 사용하세요): ' + error.message, false); return; }
+    loadAll();
+  }
+
+  function setMsg(id, text, ok){
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+
+  loadAll();
+</script>
+
+</body>
+</html>

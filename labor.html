@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>인건비 캘린더</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+<style>
+  :root{
+    --blue:#2563eb; --blue-dark:#1d4ed8; --blue-bg:#eff6ff;
+    --text:#0f172a; --sub:#64748b; --line:#e5e7eb; --red:#dc2626; --green:#16a34a;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:#f8fafc; color:var(--text); font-family:'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,sans-serif; }
+  .wrap{ max-width:720px; margin:0 auto; padding:16px 16px 80px; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  h1{ font-size:20px; font-weight:700; margin:0; }
+  .nav-links{ display:flex; gap:10px; }
+  .nav-links a{ font-size:13px; color:var(--blue); text-decoration:none; font-weight:600; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; box-shadow:0 1px 3px rgba(15,23,42,0.04); }
+  .card h2{ font-size:15px; font-weight:700; margin:0 0 12px; }
+  .field{ margin-bottom:10px; }
+  .field label{ display:block; font-size:12px; color:var(--sub); font-weight:600; margin-bottom:4px; }
+  .field input{ width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font-size:15px; font-family:inherit; background:#fff; }
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .btn{ padding:10px 14px; border:none; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .btn-primary{ background:var(--blue); color:#fff; width:100%; padding:12px; }
+  .btn-ghost{ background:var(--blue-bg); color:var(--blue-dark); font-size:12px; padding:8px 10px; }
+  .msg{ font-size:12px; margin-top:8px; text-align:center; min-height:16px; }
+  .msg.ok{ color:var(--green); }
+  .msg.err{ color:var(--red); }
+  .worker-row{ display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .worker-row:last-child{ border-bottom:none; }
+  .worker-row input[type=checkbox]{ width:20px; height:20px; flex-shrink:0; }
+  .worker-row .wname{ flex:1; font-size:14px; font-weight:600; }
+  .worker-row input[type=number]{ width:100px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:14px; font-family:inherit; }
+  .empty-box{ color:var(--sub); font-size:13px; text-align:center; padding:16px 0; }
+  .cal-scroll{ overflow-x:auto; }
+  table.cal{ border-collapse:collapse; font-size:12px; white-space:nowrap; }
+  table.cal th, table.cal td{ padding:6px 8px; border:1px solid var(--line); text-align:center; }
+  table.cal th{ background:#f8fafc; color:var(--sub); font-weight:600; }
+  table.cal td.wname{ text-align:left; font-weight:600; position:sticky; left:0; background:#fff; }
+  table.cal td.amt{ color:var(--blue-dark); }
+  table.cal tr.total td{ font-weight:700; background:#f8fafc; }
+  .add-worker-toggle{ font-size:12px; color:var(--blue); background:none; border:none; cursor:pointer; padding:0; margin-bottom:10px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <h1>인건비 캘린더</h1>
+    <div class="nav-links"><a href="input.html">입력</a><a href="index.html">대시보드</a></div>
+  </div>
+
+  <div class="card">
+    <button class="add-worker-toggle" onclick="toggleAddWorkerBox()">+ 근무자 등록/관리</button>
+    <div id="addWorkerBox" style="display:none;">
+      <div class="row2">
+        <div class="field"><label>이름</label><input type="text" id="newWorkerName" placeholder="예: 김영희"></div>
+        <div class="field"><label>기본일당(원)</label><input type="number" id="newWorkerWage" placeholder="예: 100000"></div>
+      </div>
+      <button class="btn btn-primary" onclick="addWorker()">근무자 추가</button>
+      <div class="msg" id="workerMsg"></div>
+      <div id="workerManageList" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>오늘 근무자 체크</h2>
+    <div class="field"><label>날짜</label><input type="date" id="checkDate"></div>
+    <div id="checkList"><div class="empty-box">불러오는 중...</div></div>
+    <button class="btn btn-primary" onclick="saveAttendance()" style="margin-top:10px;">저장</button>
+    <div class="msg" id="checkMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>근무 캘린더</h2>
+    <div class="field"><label>월 선택</label><input type="month" id="calMonth"></div>
+    <div class="cal-scroll" id="calTable"><div class="empty-box">불러오는 중...</div></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+  const { createClient } = supabase;
+  let db = null;
+  try{
+    db = createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey);
+  }catch(e){
+    document.querySelector('.wrap').innerHTML =
+      '<div class="topbar"><h1>인건비 캘린더</h1></div><div class="card" style="color:#dc2626;">' +
+      'config.js에 Supabase URL/anon key가 아직 설정되지 않았습니다.<br>README.md의 1단계를 먼저 진행해주세요.</div>';
+    throw e;
+  }
+
+  function fmt(n){ return Number(n || 0).toLocaleString('ko-KR'); }
+  function toggleAddWorkerBox(){
+    const el = document.getElementById('addWorkerBox');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  }
+  function todayStr(){
+    const d = new Date();
+    const tz = d.getTimezoneOffset() * 60000;
+    return new Date(d - tz).toISOString().slice(0,10);
+  }
+
+  let workers = [];
+
+  document.getElementById('checkDate').value = todayStr();
+  document.getElementById('calMonth').value = todayStr().slice(0,7);
+
+  async function loadWorkers(){
+    const { data, error } = await db.from('workers').select('*').order('name');
+    if(error){ console.error(error); return; }
+    workers = data || [];
+    renderWorkerManageList();
+    renderCheckList();
+  }
+
+  function renderWorkerManageList(){
+    const el = document.getElementById('workerManageList');
+    if(!workers.length){ el.innerHTML = '<div class="empty-box">등록된 근무자가 없습니다.</div>'; return; }
+    el.innerHTML = workers.map(w => `
+      <div class="worker-row">
+        <span class="wname">${w.name}${!w.active ? ' (비활성)' : ''} · 일당 ${fmt(w.daily_wage)}원</span>
+        <button type="button" class="btn btn-ghost" onclick="toggleWorkerActive(${w.id}, ${!w.active})">${w.active ? '비활성화' : '활성화'}</button>
+      </div>`).join('');
+  }
+
+  async function addWorker(){
+    const name = document.getElementById('newWorkerName').value.trim();
+    const wage = Number(document.getElementById('newWorkerWage').value) || 0;
+    if(!name){ setMsg('workerMsg', '이름을 입력하세요', false); return; }
+    const { error } = await db.from('workers').insert({ name, daily_wage: wage });
+    if(error){ setMsg('workerMsg', '추가 실패: ' + error.message, false); return; }
+    setMsg('workerMsg', '추가됨', true);
+    document.getElementById('newWorkerName').value = '';
+    document.getElementById('newWorkerWage').value = '';
+    loadWorkers();
+  }
+
+  async function toggleWorkerActive(id, newActive){
+    await db.from('workers').update({ active: newActive }).eq('id', id);
+    loadWorkers();
+  }
+
+  async function renderCheckList(){
+    const date = document.getElementById('checkDate').value;
+    const activeWorkers = workers.filter(w => w.active);
+    if(!activeWorkers.length){
+      document.getElementById('checkList').innerHTML = '<div class="empty-box">활성 근무자가 없습니다. 위에서 먼저 등록해주세요.</div>';
+      return;
+    }
+    const { data: logs } = await db.from('work_logs').select('*').eq('work_date', date);
+    const logMap = {};
+    (logs || []).forEach(l => logMap[l.worker_id] = l);
+
+    document.getElementById('checkList').innerHTML = activeWorkers.map(w => {
+      const log = logMap[w.id];
+      return `
+        <div class="worker-row">
+          <input type="checkbox" id="chk_${w.id}" ${log ? 'checked' : ''}>
+          <span class="wname">${w.name}</span>
+          <input type="number" id="wage_${w.id}" value="${log ? log.wage_paid : w.daily_wage}">
+        </div>`;
+    }).join('');
+  }
+
+  async function saveAttendance(){
+    const date = document.getElementById('checkDate').value;
+    const activeWorkers = workers.filter(w => w.active);
+    const upserts = [];
+    const toDelete = [];
+    activeWorkers.forEach(w => {
+      const checked = document.getElementById('chk_' + w.id).checked;
+      const wage = Number(document.getElementById('wage_' + w.id).value) || 0;
+      if(checked){
+        upserts.push({ work_date: date, worker_id: w.id, wage_paid: wage });
+      } else {
+        toDelete.push(w.id);
+      }
+    });
+    if(upserts.length){
+      const { error } = await db.from('work_logs').upsert(upserts, { onConflict: 'work_date,worker_id' });
+      if(error){ setMsg('checkMsg', '저장 실패: ' + error.message, false); return; }
+    }
+    if(toDelete.length){
+      await db.from('work_logs').delete().eq('work_date', date).in('worker_id', toDelete);
+    }
+    setMsg('checkMsg', '저장됨', true);
+    renderCalendar();
+  }
+
+  function daysInMonth(monthStr){
+    const [y, m] = monthStr.split('-').map(Number);
+    return new Date(y, m, 0).getDate();
+  }
+
+  async function renderCalendar(){
+    const monthStr = document.getElementById('calMonth').value;
+    if(!monthStr) return;
+    const [y, m] = monthStr.split('-').map(Number);
+    const nDays = daysInMonth(monthStr);
+    const startDate = `${monthStr}-01`;
+    const endDate = m === 12 ? `${y+1}-01-01` : `${y}-${String(m+1).padStart(2,'0')}-01`;
+
+    const { data: logs, error } = await db.from('work_logs').select('*').gte('work_date', startDate).lt('work_date', endDate);
+    const el = document.getElementById('calTable');
+    if(error){ el.innerHTML = '<div class="empty-box">불러오기 실패: ' + error.message + '</div>'; return; }
+    if(!workers.length){ el.innerHTML = '<div class="empty-box">등록된 근무자가 없습니다.</div>'; return; }
+
+    const byWorkerDay = {};
+    (logs || []).forEach(l => {
+      const day = Number(l.work_date.slice(8,10));
+      byWorkerDay[l.worker_id + '_' + day] = l.wage_paid;
+    });
+
+    let head = '<tr><th>이름</th>';
+    for(let d = 1; d <= nDays; d++) head += `<th>${d}</th>`;
+    head += '<th>일수</th><th>합계</th></tr>';
+
+    let body = '';
+    const dayTotals = new Array(nDays + 1).fill(0);
+    let grandTotal = 0;
+    workers.forEach(w => {
+      let rowTotal = 0, workDays = 0;
+      let cells = '';
+      for(let d = 1; d <= nDays; d++){
+        const v = byWorkerDay[w.id + '_' + d];
+        if(v !== undefined){ rowTotal += Number(v); workDays++; dayTotals[d] += Number(v); }
+        cells += `<td class="amt">${v !== undefined ? fmt(v) : ''}</td>`;
+      }
+      grandTotal += rowTotal;
+      body += `<tr><td class="wname">${w.name}</td>${cells}<td>${workDays}</td><td class="amt">${fmt(rowTotal)}</td></tr>`;
+    });
+
+    let totalRow = '<tr class="total"><td class="wname">일별 합계</td>';
+    for(let d = 1; d <= nDays; d++) totalRow += `<td>${dayTotals[d] ? fmt(dayTotals[d]) : ''}</td>`;
+    totalRow += `<td></td><td>${fmt(grandTotal)}</td></tr>`;
+
+    el.innerHTML = `<table class="cal">${head}${body}${totalRow}</table>`;
+  }
+
+  function setMsg(id, text, ok){
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+
+  document.getElementById('checkDate').addEventListener('change', renderCheckList);
+  document.getElementById('calMonth').addEventListener('change', renderCalendar);
+
+  loadWorkers().then(renderCalendar);
+</script>
+
+</body>
+</html>

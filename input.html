@@ -27,6 +27,7 @@
   .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
   h1{ font-size:20px; font-weight:700; margin:0; }
   a.dash-link{ font-size:13px; color:var(--blue); text-decoration:none; font-weight:600; }
+  .nav-links{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
   .date-row{ display:flex; align-items:center; gap:10px; margin-bottom:18px; }
   .date-row label{ font-size:13px; color:var(--sub); font-weight:600; }
   .date-row input[type=date]{
@@ -84,7 +85,11 @@
 <div class="wrap">
   <div class="topbar">
     <h1>오늘 입력</h1>
-    <a class="dash-link" href="index.html">대시보드 →</a>
+    <div class="nav-links">
+      <a class="dash-link" href="items.html">품목관리</a>
+      <a class="dash-link" href="labor.html">인건비</a>
+      <a class="dash-link" href="index.html">대시보드 →</a>
+    </div>
   </div>
 
   <div class="date-row">
@@ -102,6 +107,23 @@
     </div>
     <button class="btn btn-primary" onclick="saveRevenue()">매출 저장</button>
     <div class="msg" id="revMsg"></div>
+  </div>
+
+  <!-- 기타비용 (택배비 등) -->
+  <div class="card">
+    <h2>🧾 택배비 / 기타비용</h2>
+    <div class="row2">
+      <div class="field"><label>비용 종류</label>
+        <select id="costType">
+          <option value="택배비">택배비</option>
+          <option value="기타">기타</option>
+        </select>
+      </div>
+      <div class="field"><label>금액 (원)</label><input type="number" id="costAmount" inputmode="numeric"></div>
+    </div>
+    <div class="field"><label>메모 (선택)</label><input type="text" id="costNote"></div>
+    <button class="btn btn-primary" onclick="saveCost()">비용 저장</button>
+    <div class="msg" id="costMsg"></div>
   </div>
 
   <!-- 원물 입고 -->
@@ -310,6 +332,21 @@
     refreshTodayLog();
   }
 
+  async function saveCost(){
+    const date = document.getElementById('entryDate').value;
+    const cost_type = document.getElementById('costType').value;
+    const amount = Number(document.getElementById('costAmount').value);
+    const note = document.getElementById('costNote').value.trim() || null;
+    if(!date || !amount){ setMsg('costMsg', '날짜와 금액을 입력하세요', false); return; }
+    const { error } = await db.from('daily_costs').insert({ cost_date: date, cost_type, amount, note });
+    if(error){ setMsg('costMsg', '저장 실패: ' + error.message, false); return; }
+    setMsg('costMsg', '저장됨', true);
+    document.getElementById('costAmount').value = '';
+    document.getElementById('costNote').value = '';
+    showToast(cost_type + ' 저장됨');
+    refreshTodayLog();
+  }
+
   async function saveMovement(category, movementType, prefix){
     const date = document.getElementById('entryDate').value;
     const itemId = document.getElementById(prefix + 'Item').value;
@@ -354,14 +391,19 @@
 
   async function refreshTodayLog(){
     const date = document.getElementById('entryDate').value;
-    const [rev, mov] = await Promise.all([
+    const [rev, mov, cost] = await Promise.all([
       db.from('daily_revenue').select('*').eq('revenue_date', date).order('created_at', { ascending: false }),
       db.from('stock_movements').select('*, items(name,category,unit)').eq('movement_date', date).order('created_at', { ascending: false }),
+      db.from('daily_costs').select('*').eq('cost_date', date).order('created_at', { ascending: false }),
     ]);
     const rows = [];
     (rev.data || []).forEach(r => {
       const label = `매출  ${Number(r.amount).toLocaleString('ko-KR')}원${r.channel ? ' · ' + r.channel : ''}${r.note ? ' · ' + r.note : ''}`;
       rows.push(rowHtml(label, () => editRevenue(r), () => removeRow('daily_revenue', r.id)));
+    });
+    (cost.data || []).forEach(c => {
+      const label = `${c.cost_type}  ${Number(c.amount).toLocaleString('ko-KR')}원${c.note ? ' · ' + c.note : ''}`;
+      rows.push(rowHtml(label, () => editCost(c), () => removeRow('daily_costs', c.id)));
     });
     (mov.data || []).forEach(m => {
       const it = m.items;
@@ -401,6 +443,17 @@
     const amount = Number(newAmount);
     if(!amount || amount < 0){ alert('올바른 금액을 입력하세요'); return; }
     const { error } = await db.from('daily_revenue').update({ amount }).eq('id', r.id);
+    if(error){ alert('수정 실패: ' + error.message); return; }
+    showToast('수정됨');
+    refreshTodayLog();
+  }
+
+  async function editCost(c){
+    const newAmount = prompt('새 금액(원)을 입력하세요', c.amount);
+    if(newAmount === null) return;
+    const amount = Number(newAmount);
+    if(!amount || amount < 0){ alert('올바른 금액을 입력하세요'); return; }
+    const { error } = await db.from('daily_costs').update({ amount }).eq('id', c.id);
     if(error){ alert('수정 실패: ' + error.message); return; }
     showToast('수정됨');
     refreshTodayLog();
