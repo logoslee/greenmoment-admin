@@ -78,7 +78,8 @@ create index if not exists work_logs_date_idx on work_logs (work_date);
 create index if not exists work_logs_worker_idx on work_logs (worker_id);
 
 -- 품목별 현재 재고 = 입고 - 출하 - 폐기 (+조정은 그대로 더함, 마이너스로 넣으면 차감됨)
-create or replace view v_stock_current as
+drop view if exists v_stock_current;
+create view v_stock_current as
 select
   i.id as item_id,
   i.name,
@@ -97,7 +98,10 @@ group by i.id, i.name, i.category, i.unit;
 
 -- 날짜별 매출 / 비용 항목별 / 순이익
 -- 순이익 = 매출 - 원물출하원가 - 폐기손실 - 박스비 - 택배비 - 인건비
-create or replace view v_daily_summary as
+-- 기존 v_daily_summary가 다른 컬럼 구성(예: cogs)으로 이미 만들어져 있을 수 있어서,
+-- CREATE OR REPLACE 대신 먼저 지우고 다시 만듭니다 (뷰는 컬럼 이름/개수를 OR REPLACE로 바꿀 수 없음).
+drop view if exists v_daily_summary;
+create view v_daily_summary as
 with revenue as (
   select revenue_date as date, sum(amount) as revenue
   from daily_revenue
@@ -177,7 +181,8 @@ left join labor l on l.date = d.date
 order by d.date;
 
 -- 월별 근무자별 근무일수/총 지급액 (근무캘린더용)
-create or replace view v_worker_monthly as
+drop view if exists v_worker_monthly;
+create view v_worker_monthly as
 select
   worker_id,
   date_trunc('month', work_date)::date as month,
