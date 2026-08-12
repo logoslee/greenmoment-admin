@@ -169,6 +169,12 @@
       db.from('items').select('id,name,category,weight_kg,shipping_fee_override,box_item_id,box_qty_per_unit').eq('active', true),
       db.from('item_aliases').select('item_id, alias_text'),
     ]);
+    if(itemsRes.error || aliasRes.error){
+      const msg = 'DB 조회 실패: ' + ((itemsRes.error || aliasRes.error).message)
+        + ' — db/schema.sql을 Supabase SQL Editor에서 아직 안 돌리셨을 수 있어요.';
+      alert(msg);
+      throw new Error(msg);
+    }
     itemsCache = itemsRes.data || [];
     itemNameMap = {};
     itemById = {};
