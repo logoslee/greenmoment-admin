@@ -218,7 +218,7 @@
   function itemOptionsHtml(selectedId){
     const groups = { '원물': [], '박스': [], '부자재': [] };
     itemsCache.forEach(i => { if(groups[i.category]) groups[i.category].push(i); });
-    let html = '<option value="">-- 품목 선택 --</option>';
+    let html = '<option value="">-- 품목 선택 --</option><option value="__new__">+ 새 품목으로 추가</option>';
     Object.keys(groups).forEach(cat => {
       if(!groups[cat].length) return;
       html += `<optgroup label="${cat}">`;
@@ -228,6 +228,54 @@
       html += '</optgroup>';
     });
     return html;
+  }
+
+  function unmatchedRowHtml(prefix, index, name, count){
+    return `
+      <div class="unmatched-row">
+        <div>
+          <div class="unmatched-name">${name}</div>
+          <div class="unmatched-count">${count}건</div>
+        </div>
+        <select id="${prefix}Pick_${index}" onchange="onUnmatchedSelect(this)">${itemOptionsHtml(null)}</select>
+        <div class="new-item-inline" id="${prefix}New_${index}" style="display:none; flex-basis:100%; margin-top:8px; padding:10px; background:#f8fafc; border:1px dashed var(--line); border-radius:10px;">
+          <div class="row2">
+            <div class="field"><label>카테고리</label>
+              <select id="${prefix}NewCat_${index}">
+                <option value="원물">원물</option>
+                <option value="박스">박스</option>
+                <option value="부자재">부자재</option>
+              </select>
+            </div>
+            <div class="field"><label>단위</label><input type="text" id="${prefix}NewUnit_${index}" value="kg"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>매입단가</label><input type="number" id="${prefix}NewCost_${index}" placeholder="0"></div>
+            <div class="field"><label>판매단가</label><input type="number" id="${prefix}NewSale_${index}" placeholder="0"></div>
+          </div>
+          <button type="button" class="btn btn-ghost" style="width:100%;" onclick="createInlineItem('${prefix}', ${index}, ${JSON.stringify(name)})">"${name}" 이름으로 품목 추가</button>
+        </div>
+      </div>`;
+  }
+
+  function onUnmatchedSelect(sel){
+    const box = sel.parentElement.querySelector('.new-item-inline');
+    if(box) box.style.display = sel.value === '__new__' ? 'block' : 'none';
+  }
+
+  async function createInlineItem(prefix, index, rawName){
+    const category = document.getElementById(`${prefix}NewCat_${index}`).value;
+    const unit = document.getElementById(`${prefix}NewUnit_${index}`).value.trim() || '개';
+    const cost_price = Number(document.getElementById(`${prefix}NewCost_${index}`).value) || 0;
+    const sale_price = Number(document.getElementById(`${prefix}NewSale_${index}`).value) || 0;
+    const { data, error } = await db.from('items').insert({ category, name: rawName, unit, cost_price, sale_price }).select().single();
+    if(error){ alert('품목 추가 실패: ' + error.message); return; }
+    itemsCache.push(data);
+    itemById[data.id] = data;
+    itemNameMap[normalizeName(data.name)] = data.id;
+    const sel = document.getElementById(`${prefix}Pick_${index}`);
+    sel.innerHTML = itemOptionsHtml(data.id);
+    document.getElementById(`${prefix}New_${index}`).style.display = 'none';
   }
 
   // ---------- 엑셀 읽기 ----------
@@ -313,14 +361,7 @@
     if(!adminUnmatchedNames.length){
       el.innerHTML = '<div class="empty-box">미매칭 품목이 없습니다 🎉</div>';
     }else{
-      el.innerHTML = adminUnmatchedNames.map((name, i) => `
-        <div class="unmatched-row">
-          <div>
-            <div class="unmatched-name">${name}</div>
-            <div class="unmatched-count">${byName[name].length}건</div>
-          </div>
-          <select id="adminPick_${i}">${itemOptionsHtml(null)}</select>
-        </div>`).join('');
+      el.innerHTML = adminUnmatchedNames.map((name, i) => unmatchedRowHtml('admin', i, name, byName[name].length)).join('');
     }
     document.getElementById('adminPreviewCard').style.display = 'block';
   }
@@ -452,14 +493,7 @@
       if(!cjUnmatchedNames.length){
         el.innerHTML = '<div class="empty-box">미매칭 품목이 없습니다 🎉</div>';
       }else{
-        el.innerHTML = cjUnmatchedNames.map((name, i) => `
-          <div class="unmatched-row">
-            <div>
-              <div class="unmatched-name">${name}</div>
-              <div class="unmatched-count">${byName[name].length}건</div>
-            </div>
-            <select id="cjPick_${i}">${itemOptionsHtml(null)}</select>
-          </div>`).join('');
+        el.innerHTML = cjUnmatchedNames.map((name, i) => unmatchedRowHtml('cj', i, name, byName[name].length)).join('');
       }
       document.getElementById('cjPreviewCard').style.display = 'block';
       statusEl.textContent = `${cjPending.length}행 인식 완료`;
