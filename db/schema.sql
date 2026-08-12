@@ -113,6 +113,14 @@ create table if not exists work_logs (
 create index if not exists work_logs_date_idx on work_logs (work_date);
 create index if not exists work_logs_worker_idx on work_logs (worker_id);
 
+-- 파일 업로드 1회 = 배치 1건. 업로드한 파일 단위로 나중에 통째로 되돌릴 수 있게 배치를 남겨둠.
+create table if not exists upload_batches (
+  id bigint generated always as identity primary key,
+  source text not null check (source in ('admin', 'cj')),
+  row_count integer not null default 0,
+  uploaded_at timestamptz not null default now()
+);
+
 -- 택배/주문 파일 업로드로 쌓이는 출고 원장. 매칭된 행은 저장 시 stock_movements에도 '출하' 건을
 -- 같이 기록해서 재고/원가 계산이 수기 입력 없이도 자동 반영되게 함.
 create table if not exists shipments (
@@ -128,8 +136,13 @@ create table if not exists shipments (
   courier_fee numeric,
   vendor text,
   note text,
+  batch_id bigint references upload_batches(id) on delete set null,
+  fee_batch_id bigint references upload_batches(id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+alter table shipments add column if not exists batch_id bigint references upload_batches(id) on delete set null;
+alter table shipments add column if not exists fee_batch_id bigint references upload_batches(id) on delete set null;
 
 -- (일반 유니크 인덱스로 둠 — Postgres는 NULL끼리는 원래 유니크 충돌로 안 봐서 order_no/tracking_no가
 -- 없는 행끼리는 자유롭게 허용되고, PostgREST의 upsert(onConflict) 부분 인덱스는 인식 못 하므로 이렇게 함)
@@ -137,6 +150,11 @@ create unique index if not exists shipments_source_order_key on shipments (sourc
 create unique index if not exists shipments_tracking_key on shipments (tracking_no);
 create index if not exists shipments_date_idx on shipments (shipped_date);
 create index if not exists shipments_item_idx on shipments (item_id);
+create index if not exists shipments_batch_idx on shipments (batch_id);
+create index if not exists shipments_fee_batch_idx on shipments (fee_batch_id);
+
+alter table stock_movements add column if not exists batch_id bigint references upload_batches(id) on delete set null;
+create index if not exists stock_movements_batch_idx on stock_movements (batch_id);
 
 -- 품목별 현재 재고 = 입고 - 출하 - 폐기 (+조정은 그대로 더함, 마이너스로 넣으면 차감됨)
 drop view if exists v_stock_current;
@@ -303,6 +321,7 @@ alter table work_logs enable row level security;
 alter table shipping_fee_tiers enable row level security;
 alter table item_aliases enable row level security;
 alter table shipments enable row level security;
+alter table upload_batches enable row level security;
 
 drop policy if exists "public read/write items" on items;
 create policy "public read/write items" on items for all using (true) with check (true);
@@ -330,3 +349,6 @@ create policy "public read/write item_aliases" on item_aliases for all using (tr
 
 drop policy if exists "public read/write shipments" on shipments;
 create policy "public read/write shipments" on shipments for all using (true) with check (true);
+
+drop policy if exists "public read/write upload_batches" on upload_batches;
+create policy "public read/write upload_batches" on upload_batches for all using (true) with check (true);

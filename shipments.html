@@ -43,6 +43,11 @@
   .badge{ display:inline-block; font-size:11px; padding:2px 8px; border-radius:99px; font-weight:700; }
   .badge-warn{ background:var(--orange-bg); color:var(--orange); }
   .badge-ok{ background:#f0fdf4; color:var(--green); }
+  .batch-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
+  .batch-row:last-child{ border-bottom:none; }
+  .batch-info{ font-size:13px; }
+  .batch-info .batch-sub{ font-size:11px; color:var(--sub); margin-top:2px; }
+  .batch-del-btn{ border:none; background:#fef2f2; color:var(--red); border-radius:8px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0; }
   table.agg{ width:100%; border-collapse:collapse; font-size:13px; }
   table.agg th{ text-align:left; color:var(--sub); font-weight:600; padding:6px 4px; border-bottom:1px solid var(--line); font-size:12px; }
   table.agg td{ padding:7px 4px; border-bottom:1px solid var(--line); }
@@ -104,12 +109,14 @@
       <div class="field"><label>시작일</label><input type="date" id="aggStart"></div>
       <div class="field"><label>종료일</label><input type="date" id="aggEnd"></div>
     </div>
-    <div style="display:flex; gap:8px;">
-      <button class="btn btn-ghost" style="flex:1;" onclick="loadAggregation()">조회</button>
-      <button class="btn btn-danger" style="flex:1;" onclick="deleteAggregationRange()">이 기간 데이터 삭제</button>
-    </div>
+    <button class="btn btn-ghost" style="width:100%;" onclick="loadAggregation()">조회</button>
     <div id="aggResult" style="margin-top:12px;"></div>
-    <div class="msg" id="aggDeleteMsg"></div>
+  </div>
+
+  <!-- 4. 업로드 내역 (파일 단위 삭제) -->
+  <div class="card">
+    <h2>최근 업로드 내역</h2>
+    <div id="batchList"><div class="empty-box">불러오는 중...</div></div>
   </div>
 </div>
 
@@ -306,6 +313,10 @@
       }
     }
 
+    const { data: batch, error: batchErr } = await db.from('upload_batches')
+      .insert({ source: 'admin', row_count: adminPending.length }).select().single();
+    if(batchErr){ msgEl.textContent = '배치 생성 실패: ' + batchErr.message; msgEl.className = 'msg err'; btn.disabled = false; return; }
+
     const shippedDate = document.getElementById('adminDate').value;
     const rows = adminPending.map(r => ({
       shipped_date: shippedDate,
@@ -316,6 +327,7 @@
       raw_product_name: r.raw_product_name,
       quantity: r.quantity,
       vendor: r.vendor,
+      batch_id: batch.id,
     }));
 
     const { data: inserted, error } = await db.from('shipments')
@@ -329,17 +341,19 @@
 
     const movements = (inserted || [])
       .filter(r => r.item_id)
-      .map(r => ({ movement_date: r.shipped_date, item_id: r.item_id, movement_type: '출하', quantity: r.quantity, note: '어드민 업로드 자동반영 (주문번호 ' + (r.order_no || '-') + ')' }));
+      .map(r => ({ movement_date: r.shipped_date, item_id: r.item_id, movement_type: '출하', quantity: r.quantity, batch_id: batch.id, note: '어드민 업로드 자동반영 (주문번호 ' + (r.order_no || '-') + ')' }));
     if(movements.length){
       const { error: moveErr } = await db.from('stock_movements').insert(movements);
       if(moveErr){ msgEl.textContent = '주문은 저장됐지만 재고 반영 일부 실패: ' + moveErr.message; msgEl.className = 'msg err'; btn.disabled = false; return; }
     }
 
     const skipped = rows.length - (inserted || []).length;
+    await db.from('upload_batches').update({ row_count: inserted.length }).eq('id', batch.id);
     msgEl.textContent = `저장 완료 — 새로 ${inserted.length}건 등록, 이미 있던 ${skipped}건은 건너뜀`;
     msgEl.className = 'msg ok';
     btn.disabled = false;
     loadAggregation();
+    loadBatchList();
   }
 
   // ---------- ② CJ택배 다운로드양식 ----------
@@ -444,7 +458,11 @@
       }
     }
 
-    // 1) ①과 매칭된 건: 택배비/날짜 보강 (id 기준 upsert = update)
+    const { data: batch, error: batchErr } = await db.from('upload_batches')
+      .insert({ source: 'cj', row_count: cjPending.length }).select().single();
+    if(batchErr){ msgEl.textContent = '배치 생성 실패: ' + batchErr.message; msgEl.className = 'msg err'; btn.disabled = false; return; }
+
+    // 1) ①과 매칭된 건: 택배비 보강 (id 기준 update, 이 배치가 채운 값이라고 fee_batch_id에 표시)
     const trackingNos = [...new Set(cjPending.map(r => r.tracking_no))];
     const { data: existing, error: exErr } = await db.from('shipments')
       .select('id, tracking_no, source, item_id').in('tracking_no', trackingNos);
@@ -461,7 +479,7 @@
     });
     if(enrichUpdates.length){
       const results = await Promise.all(enrichUpdates.map(u =>
-        db.from('shipments').update({ courier_fee: u.courier_fee }).eq('id', u.id)
+        db.from('shipments').update({ courier_fee: u.courier_fee, fee_batch_id: batch.id }).eq('id', u.id)
       ));
       const failed = results.find(r => r.error);
       if(failed){ msgEl.textContent = '택배비 보강 실패: ' + failed.error.message; msgEl.className = 'msg err'; btn.disabled = false; return; }
@@ -471,6 +489,7 @@
     const insertRows = cjNeedsInsert.map(r => ({
       shipped_date: r.shipped_date, source: 'cj', tracking_no: r.tracking_no,
       item_id: r.item_id, raw_product_name: r.raw_product_name, quantity: r.quantity, courier_fee: r.courier_fee,
+      batch_id: batch.id,
     }));
     let newlyInserted = [];
     if(insertRows.length){
@@ -483,16 +502,18 @@
 
     const movements = newlyInserted
       .filter(r => r.item_id)
-      .map(r => ({ movement_date: r.shipped_date, item_id: r.item_id, movement_type: '출하', quantity: r.quantity, note: 'CJ 업로드 자동반영 (운송장 ' + r.tracking_no + ')' }));
+      .map(r => ({ movement_date: r.shipped_date, item_id: r.item_id, movement_type: '출하', quantity: r.quantity, batch_id: batch.id, note: 'CJ 업로드 자동반영 (운송장 ' + r.tracking_no + ')' }));
     if(movements.length){
       const { error: moveErr } = await db.from('stock_movements').insert(movements);
       if(moveErr){ msgEl.textContent = '등록됐지만 재고 반영 일부 실패: ' + moveErr.message; msgEl.className = 'msg err'; btn.disabled = false; return; }
     }
 
+    await db.from('upload_batches').update({ row_count: enrichUpdates.length + newlyInserted.length }).eq('id', batch.id);
     msgEl.textContent = `보강 ${enrichUpdates.length}건, 신규등록 ${newlyInserted.length}건 완료`;
     msgEl.className = 'msg ok';
     btn.disabled = false;
     loadAggregation();
+    loadBatchList();
   }
 
   // ---------- 집계 ----------
@@ -531,38 +552,54 @@
       </table>`;
   }
 
-  async function deleteAggregationRange(){
-    const start = document.getElementById('aggStart').value;
-    const end = document.getElementById('aggEnd').value;
-    const msgEl = document.getElementById('aggDeleteMsg');
-    if(!start || !end){ msgEl.textContent = '시작일과 종료일을 선택하세요'; msgEl.className = 'msg err'; return; }
+  async function loadBatchList(){
+    const el = document.getElementById('batchList');
+    const { data, error } = await db.from('upload_batches').select('*').order('uploaded_at', { ascending: false }).limit(20);
+    if(error){ el.innerHTML = `<div class="empty-box">불러오기 실패: ${error.message}</div>`; return; }
+    const batches = data || [];
+    if(!batches.length){ el.innerHTML = '<div class="empty-box">업로드 내역이 없습니다.</div>'; return; }
+    el.innerHTML = batches.map(b => {
+      const dt = new Date(b.uploaded_at);
+      const dtStr = dt.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const label = b.source === 'admin' ? '① 어드민 주문양식' : '② CJ택배 다운로드양식';
+      return `
+        <div class="batch-row">
+          <div class="batch-info">
+            <div>${label}</div>
+            <div class="batch-sub">${dtStr} · ${fmt(b.row_count)}건</div>
+          </div>
+          <button type="button" class="batch-del-btn" onclick="deleteBatch(${b.id}, '${b.source}')">삭제</button>
+        </div>`;
+    }).join('');
+  }
 
-    const { count, error: countErr } = await db.from('shipments')
-      .select('id', { count: 'exact', head: true })
-      .gte('shipped_date', start).lte('shipped_date', end);
-    if(countErr){ msgEl.textContent = '조회 실패: ' + countErr.message; msgEl.className = 'msg err'; return; }
-    if(!count){ msgEl.textContent = '해당 기간에 삭제할 데이터가 없습니다'; msgEl.className = 'msg'; return; }
+  async function deleteBatch(batchId, source){
+    const label = source === 'admin' ? '어드민 주문양식' : 'CJ택배 다운로드양식';
+    const confirmMsg = source === 'admin'
+      ? `이 "${label}" 업로드로 등록된 출고 기록과 재고 반영을 모두 삭제할까요?`
+      : `이 "${label}" 업로드로 새로 등록된 건은 삭제하고, 기존 주문에 채워둔 택배비는 원래대로(빈 값) 되돌릴까요?`;
+    if(!confirm(confirmMsg)) return;
 
-    if(!confirm(`${start} ~ ${end} 기간의 출고 기록 ${count}건과, 그로 인해 자동으로 쌓인 재고 출하 기록을 모두 삭제할까요?\n(수기로 입력한 출하 기록은 지워지지 않습니다)`)) return;
+    const { error: moveErr } = await db.from('stock_movements').delete().eq('batch_id', batchId);
+    if(moveErr){ alert('재고 기록 삭제 실패: ' + moveErr.message); return; }
 
-    msgEl.textContent = '삭제 중...'; msgEl.className = 'msg';
+    const { error: shipErr } = await db.from('shipments').delete().eq('batch_id', batchId);
+    if(shipErr){ alert('출고 기록 삭제 실패: ' + shipErr.message); return; }
 
-    const { error: moveErr } = await db.from('stock_movements')
-      .delete()
-      .gte('movement_date', start).lte('movement_date', end)
-      .like('note', '%업로드 자동반영%');
-    if(moveErr){ msgEl.textContent = '재고 기록 삭제 실패: ' + moveErr.message; msgEl.className = 'msg err'; return; }
+    if(source === 'cj'){
+      const { error: revertErr } = await db.from('shipments')
+        .update({ courier_fee: null, fee_batch_id: null })
+        .eq('fee_batch_id', batchId);
+      if(revertErr){ alert('택배비 되돌리기 실패: ' + revertErr.message); return; }
+    }
 
-    const { error: shipErr } = await db.from('shipments')
-      .delete()
-      .gte('shipped_date', start).lte('shipped_date', end);
-    if(shipErr){ msgEl.textContent = '출고 기록 삭제 실패: ' + shipErr.message; msgEl.className = 'msg err'; return; }
-
-    msgEl.textContent = `${count}건 삭제 완료`; msgEl.className = 'msg ok';
+    await db.from('upload_batches').delete().eq('id', batchId);
+    loadBatchList();
     loadAggregation();
   }
 
   loadMatchData();
+  loadBatchList();
 </script>
 
 </body>
