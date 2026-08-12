@@ -27,6 +27,7 @@
   .btn-primary{ background:var(--blue); color:#fff; width:100%; padding:12px; }
   .btn-primary:disabled{ background:#94a3b8; cursor:not-allowed; }
   .btn-ghost{ background:var(--blue-bg); color:var(--blue-dark); font-size:13px; padding:8px 12px; }
+  .btn-danger{ background:#fef2f2; color:var(--red); font-size:13px; padding:8px 12px; }
   .msg{ font-size:12px; margin-top:8px; text-align:center; min-height:16px; }
   .msg.ok{ color:var(--green); }
   .msg.err{ color:var(--red); }
@@ -103,8 +104,12 @@
       <div class="field"><label>시작일</label><input type="date" id="aggStart"></div>
       <div class="field"><label>종료일</label><input type="date" id="aggEnd"></div>
     </div>
-    <button class="btn btn-ghost" onclick="loadAggregation()">조회</button>
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-ghost" style="flex:1;" onclick="loadAggregation()">조회</button>
+      <button class="btn btn-danger" style="flex:1;" onclick="deleteAggregationRange()">이 기간 데이터 삭제</button>
+    </div>
     <div id="aggResult" style="margin-top:12px;"></div>
+    <div class="msg" id="aggDeleteMsg"></div>
   </div>
 </div>
 
@@ -524,6 +529,37 @@
           ${list.map(r => `<tr><td>${r.name}</td><td class="num">${fmt(r.qty)}${r.unit || ''}</td></tr>`).join('')}
         </tbody>
       </table>`;
+  }
+
+  async function deleteAggregationRange(){
+    const start = document.getElementById('aggStart').value;
+    const end = document.getElementById('aggEnd').value;
+    const msgEl = document.getElementById('aggDeleteMsg');
+    if(!start || !end){ msgEl.textContent = '시작일과 종료일을 선택하세요'; msgEl.className = 'msg err'; return; }
+
+    const { count, error: countErr } = await db.from('shipments')
+      .select('id', { count: 'exact', head: true })
+      .gte('shipped_date', start).lte('shipped_date', end);
+    if(countErr){ msgEl.textContent = '조회 실패: ' + countErr.message; msgEl.className = 'msg err'; return; }
+    if(!count){ msgEl.textContent = '해당 기간에 삭제할 데이터가 없습니다'; msgEl.className = 'msg'; return; }
+
+    if(!confirm(`${start} ~ ${end} 기간의 출고 기록 ${count}건과, 그로 인해 자동으로 쌓인 재고 출하 기록을 모두 삭제할까요?\n(수기로 입력한 출하 기록은 지워지지 않습니다)`)) return;
+
+    msgEl.textContent = '삭제 중...'; msgEl.className = 'msg';
+
+    const { error: moveErr } = await db.from('stock_movements')
+      .delete()
+      .gte('movement_date', start).lte('movement_date', end)
+      .like('note', '%업로드 자동반영%');
+    if(moveErr){ msgEl.textContent = '재고 기록 삭제 실패: ' + moveErr.message; msgEl.className = 'msg err'; return; }
+
+    const { error: shipErr } = await db.from('shipments')
+      .delete()
+      .gte('shipped_date', start).lte('shipped_date', end);
+    if(shipErr){ msgEl.textContent = '출고 기록 삭제 실패: ' + shipErr.message; msgEl.className = 'msg err'; return; }
+
+    msgEl.textContent = `${count}건 삭제 완료`; msgEl.className = 'msg ok';
+    loadAggregation();
   }
 
   loadMatchData();
