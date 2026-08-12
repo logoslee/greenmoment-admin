@@ -83,7 +83,7 @@
     </div>
     <div class="field"><label>기타비용 (선택)</label><input type="number" id="newMiscFee" placeholder="0"></div>
     <div class="row2" id="newBoxMapRow">
-      <div class="field"><label>이 원물 출하 시 소모되는 박스 (선택)</label><select id="newBoxItem"></select></div>
+      <div class="field"><label>기본 소모 박스 (선택 — 주문 상품명에 중량이 있으면 그 중량의 박스가 우선 적용되고, 없을 때만 이게 쓰임)</label><select id="newBoxItem"></select></div>
       <div class="field"><label>1건 출하당 박스 수량</label><input type="number" id="newBoxQty" value="1"></div>
     </div>
     <button class="btn btn-primary" onclick="createItem()">품목 추가</button>
@@ -253,7 +253,7 @@
           <div class="field"><label>기타비용 (선택)</label><input type="number" id="miscfee_${i.id}" value="${i.misc_fee || 0}"></div>
           ${i.category === '원물' ? `
           <div class="row2">
-            <div class="field"><label>이 원물 출하 시 소모되는 박스 (선택)</label><select id="boxitem_${i.id}">${boxOptionsHtml(i.box_item_id)}</select></div>
+            <div class="field"><label>기본 소모 박스 (선택 — 주문 상품명에 중량이 있으면 그 중량의 박스가 우선 적용되고, 없을 때만 이게 쓰임)</label><select id="boxitem_${i.id}">${boxOptionsHtml(i.box_item_id)}</select></div>
             <div class="field"><label>1건 출하당 박스 수량</label><input type="number" id="boxqty_${i.id}" value="${i.box_qty_per_unit || 1}"></div>
           </div>` : ''}
           <div class="item-edit-actions">
