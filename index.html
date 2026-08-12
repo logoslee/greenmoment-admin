@@ -74,12 +74,13 @@
   .dot{ width:9px; height:9px; border-radius:99px; display:inline-block; }
 
   .bottom{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
-  .stock-row{ display:flex; align-items:center; gap:10px; padding:7px 0; }
-  .stock-name{ width:120px; flex-shrink:0; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .stock-bar-track{ flex:1; height:9px; background:var(--blue-bg); border-radius:99px; overflow:hidden; }
+  .bottom > .card{ min-width:0; }
+  .stock-row{ display:flex; align-items:center; gap:8px; padding:7px 0; min-width:0; }
+  .stock-name{ width:74px; flex-shrink:0; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .stock-bar-track{ flex:1; min-width:16px; height:9px; background:var(--blue-bg); border-radius:99px; overflow:hidden; }
   .stock-bar-fill{ height:100%; background:var(--blue); border-radius:99px; }
-  .stock-amount{ width:80px; flex-shrink:0; text-align:right; font-size:12px; font-weight:700; color:var(--blue-dark); }
-  .stock-value{ width:100px; flex-shrink:0; text-align:right; font-size:11px; color:var(--sub); }
+  .stock-amount{ width:64px; flex-shrink:0; text-align:right; font-size:12px; font-weight:700; color:var(--blue-dark); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .stock-value{ width:76px; flex-shrink:0; text-align:right; font-size:11px; color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .stock-subtotal{ font-size:12px; color:var(--sub); margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--line); }
   .stock-subtotal b{ color:var(--text); }
   .total-value{ font-size:26px; font-weight:700; }
