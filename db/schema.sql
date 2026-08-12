@@ -161,6 +161,7 @@ alter table stock_movements add column if not exists batch_id bigint references 
 create index if not exists stock_movements_batch_idx on stock_movements (batch_id);
 
 -- 품목별 현재 재고 = 입고 - 출하 - 폐기 (+조정은 그대로 더함, 마이너스로 넣으면 차감됨)
+-- stock_value = 재고 수량 × 매입단가 (재고자산 금액)
 drop view if exists v_stock_current;
 create view v_stock_current as
 select
@@ -168,16 +169,23 @@ select
   i.name,
   i.category,
   i.unit,
+  i.cost_price,
   coalesce(sum(case
     when sm.movement_type = '입고' then sm.quantity
     when sm.movement_type = '조정' then sm.quantity
     when sm.movement_type in ('출하', '폐기') then -sm.quantity
     else 0
-  end), 0) as current_stock
+  end), 0) as current_stock,
+  coalesce(sum(case
+    when sm.movement_type = '입고' then sm.quantity
+    when sm.movement_type = '조정' then sm.quantity
+    when sm.movement_type in ('출하', '폐기') then -sm.quantity
+    else 0
+  end), 0) * i.cost_price as stock_value
 from items i
 left join stock_movements sm on sm.item_id = i.id
 where i.active
-group by i.id, i.name, i.category, i.unit;
+group by i.id, i.name, i.category, i.unit, i.cost_price;
 
 -- 날짜별 매출 / 비용 항목별 / 순이익
 -- 순이익 = 매출 - 원물출하원가 - 박스비 - 부자재비 - 포장비 - 기타상품비용 - 폐기손실 - 택배비 - 인건비 - 기타비용

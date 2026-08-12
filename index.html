@@ -79,6 +79,10 @@
   .stock-bar-track{ flex:1; height:9px; background:var(--blue-bg); border-radius:99px; overflow:hidden; }
   .stock-bar-fill{ height:100%; background:var(--blue); border-radius:99px; }
   .stock-amount{ width:80px; flex-shrink:0; text-align:right; font-size:12px; font-weight:700; color:var(--blue-dark); }
+  .stock-value{ width:100px; flex-shrink:0; text-align:right; font-size:11px; color:var(--sub); }
+  .stock-subtotal{ font-size:12px; color:var(--sub); margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+  .stock-subtotal b{ color:var(--text); }
+  .total-value{ font-size:26px; font-weight:700; }
 
   table.waste-table{ width:100%; border-collapse:collapse; font-size:13px; }
   table.waste-table th{ text-align:left; color:var(--sub); font-weight:600; padding:6px 4px; border-bottom:1px solid var(--line); font-size:12px; }
@@ -160,17 +164,25 @@
     </div>
   </div>
 
+  <div class="card" style="margin-bottom:20px;">
+    <div class="panel-title">재고자산 총액 (매입단가 기준)</div>
+    <div id="stockValueTotal"><div class="loading">불러오는 중...</div></div>
+  </div>
+
   <div class="bottom">
     <div class="card">
       <div class="panel-title">원물 재고 현황</div>
+      <div class="stock-subtotal" id="rawStockTotal"></div>
       <div id="rawStock"><div class="loading">불러오는 중...</div></div>
     </div>
     <div class="card">
       <div class="panel-title">박스 재고 현황</div>
+      <div class="stock-subtotal" id="boxStockTotal"></div>
       <div id="boxStock"><div class="loading">불러오는 중...</div></div>
     </div>
     <div class="card">
       <div class="panel-title">부자재 재고 현황</div>
+      <div class="stock-subtotal" id="supplyStockTotal"></div>
       <div id="supplyStock"><div class="loading">불러오는 중...</div></div>
     </div>
   </div>
@@ -463,15 +475,37 @@
     el.innerHTML = svg;
   }
 
-  function renderStock(containerId, rows){
+  function renderStockValueTotal(rows){
+    const el = document.getElementById('stockValueTotal');
+    const byCategory = { '원물': 0, '박스': 0, '부자재': 0 };
+    let total = 0;
+    rows.forEach(r => {
+      const v = Number(r.stock_value || 0);
+      total += v;
+      if(byCategory[r.category] !== undefined) byCategory[r.category] += v;
+    });
+    el.innerHTML = `
+      <div class="total-value">${fmt(total)}원</div>
+      <div class="card-sub">원물 ${fmt(byCategory['원물'])} · 박스 ${fmt(byCategory['박스'])} · 부자재 ${fmt(byCategory['부자재'])}</div>`;
+  }
+
+  function renderStock(containerId, totalId, rows){
     const el = document.getElementById(containerId);
-    if(!rows.length){ el.innerHTML = '<div class="empty-box">등록된 품목이 없습니다.</div>'; return; }
+    const totalEl = document.getElementById(totalId);
+    if(!rows.length){
+      el.innerHTML = '<div class="empty-box">등록된 품목이 없습니다.</div>';
+      if(totalEl) totalEl.innerHTML = '';
+      return;
+    }
     const max = Math.max(...rows.map(r => Number(r.current_stock)), 1);
+    const totalValue = rows.reduce((a, r) => a + Number(r.stock_value || 0), 0);
+    if(totalEl) totalEl.innerHTML = `이 카테고리 재고 비용 <b>${fmt(totalValue)}원</b>`;
     el.innerHTML = rows.map(r => `
       <div class="stock-row">
         <span class="stock-name">${r.name}</span>
         <div class="stock-bar-track"><div class="stock-bar-fill" style="width:${Math.max(0, Number(r.current_stock)/max*100).toFixed(1)}%"></div></div>
         <span class="stock-amount">${fmt(r.current_stock)}${r.unit}</span>
+        <span class="stock-value">${fmt(r.stock_value)}원</span>
       </div>`).join('');
   }
 
@@ -507,9 +541,10 @@
       renderCards(summary.data || [], stock.data || []);
       renderPeriodProfit(summary.data || []);
       renderTrendChart(summary.data || []);
-      renderStock('rawStock', (stock.data || []).filter(s => s.category === '원물'));
-      renderStock('boxStock', (stock.data || []).filter(s => s.category === '박스'));
-      renderStock('supplyStock', (stock.data || []).filter(s => s.category === '부자재'));
+      renderStock('rawStock', 'rawStockTotal', (stock.data || []).filter(s => s.category === '원물'));
+      renderStock('boxStock', 'boxStockTotal', (stock.data || []).filter(s => s.category === '박스'));
+      renderStock('supplyStock', 'supplyStockTotal', (stock.data || []).filter(s => s.category === '부자재'));
+      renderStockValueTotal(stock.data || []);
       loadWasteRange();
     }catch(err){
       console.error(err);
