@@ -191,8 +191,10 @@ group by i.id, i.name, i.category, i.unit, i.cost_price;
 -- 순이익 = 매출 - 원물출하원가 - 박스비 - 부자재비 - 포장비 - 기타상품비용 - 폐기손실 - 택배비 - 인건비 - 기타비용
 -- 기존 v_daily_summary가 다른 컬럼 구성(예: cogs)으로 이미 만들어져 있을 수 있어서,
 -- CREATE OR REPLACE 대신 먼저 지우고 다시 만듭니다 (뷰는 컬럼 이름/개수를 OR REPLACE로 바꿀 수 없음).
+-- security_invoker=true: 뷰가 만든 사람 권한이 아니라 "조회하는 사람"의 권한(RLS)으로 동작하게 함.
+-- 이게 없으면 daily_revenue에 건 RLS가 이 뷰를 통해서는 우회돼서 서브 계정도 매출을 보게 됨.
 drop view if exists v_daily_summary;
-create view v_daily_summary as
+create view v_daily_summary with (security_invoker = true) as
 with revenue as (
   select revenue_date as date, sum(amount) as revenue
   from daily_revenue
@@ -341,8 +343,25 @@ create policy "public read/write items" on items for all using (true) with check
 drop policy if exists "public read/write stock_movements" on stock_movements;
 create policy "public read/write stock_movements" on stock_movements for all using (true) with check (true);
 
+-- 매출은 로그인해야만 입력 가능, 조회는 master 역할만 (서브 계정은 매출/순이익을 볼 수 없음)
 drop policy if exists "public read/write daily_revenue" on daily_revenue;
-create policy "public read/write daily_revenue" on daily_revenue for all using (true) with check (true);
+
+drop policy if exists "authenticated insert daily_revenue" on daily_revenue;
+create policy "authenticated insert daily_revenue" on daily_revenue
+  for insert to authenticated with check (true);
+
+drop policy if exists "authenticated update daily_revenue" on daily_revenue;
+create policy "authenticated update daily_revenue" on daily_revenue
+  for update to authenticated using (true) with check (true);
+
+drop policy if exists "authenticated delete daily_revenue" on daily_revenue;
+create policy "authenticated delete daily_revenue" on daily_revenue
+  for delete to authenticated using (true);
+
+drop policy if exists "master select daily_revenue" on daily_revenue;
+create policy "master select daily_revenue" on daily_revenue
+  for select to authenticated
+  using ((auth.jwt() -> 'user_metadata' ->> 'role') = 'master');
 
 drop policy if exists "public read/write daily_costs" on daily_costs;
 create policy "public read/write daily_costs" on daily_costs for all using (true) with check (true);

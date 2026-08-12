@@ -114,6 +114,7 @@
       <a class="dash-link" href="items.html">품목관리</a>
       <a class="dash-link" href="shipments.html">택배업로드</a>
       <a class="dash-link" href="labor.html">인건비</a>
+      <a class="dash-link" href="#" onclick="doLogout(db); return false;">로그아웃</a>
       <a class="input-link" href="input.html">+ 오늘 입력</a>
     </div>
   </div>
@@ -133,7 +134,7 @@
     <div class="card" id="cardBox"><div class="loading">불러오는 중...</div></div>
   </div>
 
-  <div class="card" style="margin-bottom:20px;">
+  <div class="card" style="margin-bottom:20px;" id="periodProfitCard">
     <div class="panel-title">기간별 순이익</div>
     <div class="period-grid" id="periodProfit"><div class="loading">불러오는 중...</div></div>
 
@@ -146,7 +147,7 @@
   </div>
 
   <div class="mid">
-    <div class="card">
+    <div class="card" id="trendChartCard">
       <div class="panel-title">최근 30일 매출 / 순이익 추이</div>
       <div class="legend">
         <span><span class="dot" style="background:var(--blue)"></span>매출</span>
@@ -192,6 +193,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="config.js"></script>
+<script src="auth.js"></script>
 <script>
   const { createClient } = supabase;
   let db = null;
@@ -556,7 +558,19 @@
     }
   }
 
-  loadDashboard();
+  function applyRoleVisibility(role){
+    if(role === 'master') return;
+    ['cardRevenue', 'cardProfit', 'periodProfitCard', 'trendChartCard'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.style.display = 'none';
+    });
+  }
+
+  (async () => {
+    const role = await requireAuth(db);
+    applyRoleVisibility(role);
+    loadDashboard();
+  })();
 </script>
 
 </body>

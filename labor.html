@@ -50,7 +50,7 @@
 <div class="wrap">
   <div class="topbar">
     <h1>인건비 캘린더</h1>
-    <div class="nav-links"><a href="input.html">입력</a><a href="index.html">대시보드</a></div>
+    <div class="nav-links"><a href="input.html">입력</a><a href="shipments.html">택배업로드</a><a href="#" onclick="doLogout(db); return false;">로그아웃</a><a href="index.html">대시보드</a></div>
   </div>
 
   <div class="card">
@@ -83,6 +83,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
+<script src="auth.js"></script>
 <script>
   const { createClient } = supabase;
   let db = null;
@@ -252,7 +253,10 @@
   document.getElementById('checkDate').addEventListener('change', renderCheckList);
   document.getElementById('calMonth').addEventListener('change', renderCalendar);
 
-  loadWorkers().then(renderCalendar);
+  (async () => {
+    await requireAuth(db);
+    loadWorkers().then(renderCalendar);
+  })();
 </script>
 
 </body>

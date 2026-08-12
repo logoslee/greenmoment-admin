@@ -87,7 +87,9 @@
     <h1>오늘 입력</h1>
     <div class="nav-links">
       <a class="dash-link" href="items.html">품목관리</a>
+      <a class="dash-link" href="shipments.html">택배업로드</a>
       <a class="dash-link" href="labor.html">인건비</a>
+      <a class="dash-link" href="#" onclick="doLogout(db); return false;">로그아웃</a>
       <a class="dash-link" href="index.html">대시보드 →</a>
     </div>
   </div>
@@ -232,6 +234,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
+<script src="auth.js"></script>
 <script>
   const { createClient } = supabase;
   let db = null;
@@ -472,7 +475,10 @@
 
   document.getElementById('entryDate').addEventListener('change', refreshTodayLog);
 
-  loadItems().then(refreshTodayLog);
+  (async () => {
+    await requireAuth(db);
+    loadItems().then(refreshTodayLog);
+  })();
 </script>
 
 </body>
