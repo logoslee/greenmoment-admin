@@ -25,6 +25,10 @@ alter table items add column if not exists packing_fee numeric not null default 
 alter table items add column if not exists misc_fee numeric not null default 0;
 alter table items add column if not exists vendor text;
 
+-- 원물 품목 출하 시 자동으로 같이 소모될 박스 매핑 (예: "거봉 특품 2kg" 1건 출하 = "2kg 박스" 1개 소모)
+alter table items add column if not exists box_item_id bigint references items(id) on delete set null;
+alter table items add column if not exists box_qty_per_unit numeric not null default 1;
+
 create unique index if not exists items_name_category_key on items (name, category);
 
 -- KG구간별 기본 택배비표 (상품에 shipping_fee_override가 없으면 이 표를 적용)

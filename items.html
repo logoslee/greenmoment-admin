@@ -60,7 +60,7 @@
   <div class="card">
     <h2>+ 새 품목 추가</h2>
     <div class="field"><label>카테고리</label>
-      <select id="newCategory">
+      <select id="newCategory" onchange="toggleNewBoxMap()">
         <option value="원물">원물</option>
         <option value="박스">박스</option>
         <option value="부자재">부자재</option>
@@ -82,6 +82,10 @@
       <div class="field"><label>포장비 (선택)</label><input type="number" id="newPackFee" placeholder="예: 700"></div>
     </div>
     <div class="field"><label>기타비용 (선택)</label><input type="number" id="newMiscFee" placeholder="0"></div>
+    <div class="row2" id="newBoxMapRow">
+      <div class="field"><label>이 원물 출하 시 소모되는 박스 (선택)</label><select id="newBoxItem"></select></div>
+      <div class="field"><label>1건 출하당 박스 수량</label><input type="number" id="newBoxQty" value="1"></div>
+    </div>
     <button class="btn btn-primary" onclick="createItem()">품목 추가</button>
     <div class="msg" id="createMsg"></div>
   </div>
@@ -192,6 +196,26 @@
     stockMap = {};
     (stockRes.data || []).forEach(s => stockMap[s.item_id] = s.current_stock);
     renderList();
+    document.getElementById('newBoxItem').innerHTML = boxOptionsHtml(null);
+  }
+
+  function toggleNewBoxMap(){
+    document.getElementById('newBoxMapRow').style.display =
+      document.getElementById('newCategory').value === '원물' ? 'grid' : 'none';
+  }
+
+  function boxOptionsHtml(selectedId){
+    let html = '<option value="">-- 선택 안 함 --</option>';
+    allItems.filter(i => i.category === '박스').forEach(i => {
+      html += `<option value="${i.id}" ${String(i.id) === String(selectedId) ? 'selected' : ''}>${i.name}</option>`;
+    });
+    return html;
+  }
+
+  function boxMapLabel(i){
+    if(!i.box_item_id) return '';
+    const box = allItems.find(b => b.id === i.box_item_id);
+    return box ? ` · 박스: ${box.name} x${i.box_qty_per_unit}` : '';
   }
 
   function renderList(){
@@ -203,7 +227,7 @@
         <div class="item-summary" onclick="toggleEdit(${i.id})">
           <div>
             <div class="item-name">${i.name}${!i.active ? '<span class="badge-inactive">비활성</span>' : ''}</div>
-            <div class="item-sub">매입 ${fmt(i.cost_price)} · 판매 ${fmt(i.sale_price)} · 재고 ${fmt(stockMap[i.id] || 0)}${i.unit}${i.weight_kg ? ' · ' + i.weight_kg + 'kg' : ''}</div>
+            <div class="item-sub">매입 ${fmt(i.cost_price)} · 판매 ${fmt(i.sale_price)} · 재고 ${fmt(stockMap[i.id] || 0)}${i.unit}${i.weight_kg ? ' · ' + i.weight_kg + 'kg' : ''}${boxMapLabel(i)}</div>
           </div>
           <button type="button" class="icon-btn">✏️</button>
         </div>
@@ -226,6 +250,11 @@
             <div class="field"><label>포장비 (선택)</label><input type="number" id="packfee_${i.id}" value="${i.packing_fee || 0}"></div>
           </div>
           <div class="field"><label>기타비용 (선택)</label><input type="number" id="miscfee_${i.id}" value="${i.misc_fee || 0}"></div>
+          ${i.category === '원물' ? `
+          <div class="row2">
+            <div class="field"><label>이 원물 출하 시 소모되는 박스 (선택)</label><select id="boxitem_${i.id}">${boxOptionsHtml(i.box_item_id)}</select></div>
+            <div class="field"><label>1건 출하당 박스 수량</label><input type="number" id="boxqty_${i.id}" value="${i.box_qty_per_unit || 1}"></div>
+          </div>` : ''}
           <div class="item-edit-actions">
             <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveItem(${i.id})">저장</button>
             <button class="btn btn-ghost btn-sm" onclick="toggleActive(${i.id}, ${!i.active})">${i.active ? '비활성화' : '활성화'}</button>
@@ -253,9 +282,12 @@
     const shipping_fee_override = document.getElementById('newShipFee').value === '' ? null : Number(document.getElementById('newShipFee').value);
     const packing_fee = Number(document.getElementById('newPackFee').value) || 0;
     const misc_fee = Number(document.getElementById('newMiscFee').value) || 0;
+    const box_item_id = category === '원물' && document.getElementById('newBoxItem').value ? Number(document.getElementById('newBoxItem').value) : null;
+    const box_qty_per_unit = Number(document.getElementById('newBoxQty').value) || 1;
     if(!name){ setMsg('createMsg', '품목명을 입력하세요', false); return; }
     const { data, error } = await db.from('items').insert({
-      category, name, unit, cost_price, sale_price, weight_kg, vendor, shipping_fee_override, packing_fee, misc_fee
+      category, name, unit, cost_price, sale_price, weight_kg, vendor, shipping_fee_override, packing_fee, misc_fee,
+      box_item_id, box_qty_per_unit
     }).select().single();
     if(error){ setMsg('createMsg', '추가 실패: ' + error.message, false); return; }
     if(initialStock > 0){
@@ -267,6 +299,8 @@
     setMsg('createMsg', '추가됨', true);
     ['newName','newCost','newSale','newStock','newWeight','newVendor','newShipFee','newPackFee','newMiscFee']
       .forEach(id => document.getElementById(id).value = '');
+    document.getElementById('newBoxItem').value = '';
+    document.getElementById('newBoxQty').value = '1';
     switchTab(category);
     loadAll();
   }
@@ -285,9 +319,14 @@
     const shipping_fee_override = shipFeeEl === '' ? null : Number(shipFeeEl);
     const packing_fee = Number(document.getElementById('packfee_' + id).value) || 0;
     const misc_fee = Number(document.getElementById('miscfee_' + id).value) || 0;
+    const boxItemEl = document.getElementById('boxitem_' + id);
+    const box_item_id = boxItemEl && boxItemEl.value ? Number(boxItemEl.value) : null;
+    const boxQtyEl = document.getElementById('boxqty_' + id);
+    const box_qty_per_unit = boxQtyEl ? (Number(boxQtyEl.value) || 1) : 1;
     if(!name){ setMsg('editMsg_' + id, '품목명을 입력하세요', false); return; }
     const { error } = await db.from('items').update({
-      name, unit, cost_price, sale_price, weight_kg, vendor, shipping_fee_override, packing_fee, misc_fee
+      name, unit, cost_price, sale_price, weight_kg, vendor, shipping_fee_override, packing_fee, misc_fee,
+      box_item_id, box_qty_per_unit
     }).eq('id', id);
     if(error){ setMsg('editMsg_' + id, '저장 실패: ' + error.message, false); return; }
     const delta = newStock - oldStock;

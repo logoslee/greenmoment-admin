@@ -162,16 +162,38 @@
     return (s || '').toString().replace(/\s+/g, '');
   }
 
+  let itemById = {}; // id -> item (박스 매핑 조회용)
+
   async function loadMatchData(){
     const [itemsRes, aliasRes] = await Promise.all([
-      db.from('items').select('id,name,category,weight_kg,shipping_fee_override').eq('active', true),
+      db.from('items').select('id,name,category,weight_kg,shipping_fee_override,box_item_id,box_qty_per_unit').eq('active', true),
       db.from('item_aliases').select('item_id, alias_text'),
     ]);
     itemsCache = itemsRes.data || [];
     itemNameMap = {};
-    itemsCache.forEach(i => { itemNameMap[normalizeName(i.name)] = i.id; });
+    itemById = {};
+    itemsCache.forEach(i => { itemNameMap[normalizeName(i.name)] = i.id; itemById[i.id] = i; });
     aliasMap = {};
     (aliasRes.data || []).forEach(a => { aliasMap[normalizeName(a.alias_text)] = a.item_id; });
+  }
+
+  // 원물 품목 출하 건에서, 매핑된 박스가 있으면 그만큼 박스 출하 movement도 같이 만들어줌
+  function withBoxMovements(baseMovements){
+    const extra = [];
+    baseMovements.forEach(m => {
+      const item = itemById[m.item_id];
+      if(item && item.box_item_id){
+        extra.push({
+          movement_date: m.movement_date,
+          item_id: item.box_item_id,
+          movement_type: '출하',
+          quantity: m.quantity * (item.box_qty_per_unit || 1),
+          batch_id: m.batch_id,
+          note: '박스 자동소모 (' + item.name + ' 출하 연동)',
+        });
+      }
+    });
+    return baseMovements.concat(extra);
   }
 
   function matchItem(rawName){
@@ -339,9 +361,9 @@
       return;
     }
 
-    const movements = (inserted || [])
+    const movements = withBoxMovements((inserted || [])
       .filter(r => r.item_id)
-      .map(r => ({ movement_date: r.shipped_date, item_id: r.item_id, movement_type: '출하', quantity: r.quantity, batch_id: batch.id, note: '어드민 업로드 자동반영 (주문번호 ' + (r.order_no || '-') + ')' }));
+      .map(r => ({ movement_date: r.shipped_date, item_id: r.item_id, movement_type: '출하', quantity: r.quantity, batch_id: batch.id, note: '어드민 업로드 자동반영 (주문번호 ' + (r.order_no || '-') + ')' })));
     if(movements.length){
       const { error: moveErr } = await db.from('stock_movements').insert(movements);
       if(moveErr){ msgEl.textContent = '주문은 저장됐지만 재고 반영 일부 실패: ' + moveErr.message; msgEl.className = 'msg err'; btn.disabled = false; return; }
@@ -500,9 +522,9 @@
       newlyInserted = ins || [];
     }
 
-    const movements = newlyInserted
+    const movements = withBoxMovements(newlyInserted
       .filter(r => r.item_id)
-      .map(r => ({ movement_date: r.shipped_date, item_id: r.item_id, movement_type: '출하', quantity: r.quantity, batch_id: batch.id, note: 'CJ 업로드 자동반영 (운송장 ' + r.tracking_no + ')' }));
+      .map(r => ({ movement_date: r.shipped_date, item_id: r.item_id, movement_type: '출하', quantity: r.quantity, batch_id: batch.id, note: 'CJ 업로드 자동반영 (운송장 ' + r.tracking_no + ')' })));
     if(movements.length){
       const { error: moveErr } = await db.from('stock_movements').insert(movements);
       if(moveErr){ msgEl.textContent = '등록됐지만 재고 반영 일부 실패: ' + moveErr.message; msgEl.className = 'msg err'; btn.disabled = false; return; }
