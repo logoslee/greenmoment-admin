@@ -509,22 +509,25 @@
       if(totalEl) totalEl.innerHTML = '';
       return;
     }
-    const max = Math.max(...rows.map(r => Number(r.current_stock)), 1);
     const totalValue = rows.reduce((a, r) => a + Number(r.stock_value || 0), 0);
     if(totalEl) totalEl.innerHTML = `이 카테고리 재고 비용 <b>${fmt(totalValue)}원</b>`;
     el.innerHTML = rows.map((r, i) => {
       const detailId = containerId + '_detail_' + i;
       const adjPart = Number(r.total_adjustment) ? ` · 조정 ${fmt(r.total_adjustment)}${r.unit}` : '';
+      const totalIn = Number(r.total_in);
+      const used = Number(r.total_shipped) + Number(r.total_waste);
+      const usedPct = totalIn > 0 ? Math.min(100, used / totalIn * 100) : 0;
       return `
       <div class="stock-item">
         <div class="stock-row" onclick="toggleStockDetail('${detailId}')">
           <span class="stock-name">${r.name}</span>
-          <div class="stock-bar-track"><div class="stock-bar-fill" style="width:${Math.max(0, Number(r.current_stock)/max*100).toFixed(1)}%"></div></div>
+          <div class="stock-bar-track" title="입고 대비 사용량 ${usedPct.toFixed(0)}%"><div class="stock-bar-fill" style="width:${usedPct.toFixed(1)}%"></div></div>
           <span class="stock-amount">${fmt(r.current_stock)}${r.unit}</span>
           <span class="stock-value">${fmt(r.stock_value)}원</span>
         </div>
         <div class="stock-detail" id="${detailId}" style="display:none;">
           누적 입고 <b>${fmt(r.total_in)}${r.unit}</b> − 출하 <b>${fmt(r.total_shipped)}${r.unit}</b> − 폐기 <b>${fmt(r.total_waste)}${r.unit}</b>${adjPart} = 현재 재고 <b>${fmt(r.current_stock)}${r.unit}</b>
+          <br>입고 대비 사용률 <b>${usedPct.toFixed(1)}%</b>
         </div>
       </div>`;
     }).join('');
