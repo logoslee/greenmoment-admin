@@ -75,7 +75,11 @@
 
   .bottom{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
   .bottom > .card{ min-width:0; }
-  .stock-row{ display:flex; align-items:center; gap:8px; padding:7px 0; min-width:0; }
+  .stock-item{ border-bottom:1px solid var(--line); }
+  .stock-item:last-child{ border-bottom:none; }
+  .stock-row{ display:flex; align-items:center; gap:8px; padding:7px 0; min-width:0; cursor:pointer; }
+  .stock-detail{ font-size:11px; color:var(--sub); padding:0 0 10px; line-height:1.6; }
+  .stock-detail b{ color:var(--text); font-weight:700; }
   .stock-name{ width:74px; flex-shrink:0; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .stock-bar-track{ flex:1; min-width:16px; height:9px; background:var(--blue-bg); border-radius:99px; overflow:hidden; }
   .stock-bar-fill{ height:100%; background:var(--blue); border-radius:99px; }
@@ -492,6 +496,11 @@
       <div class="card-sub">원물 ${fmt(byCategory['원물'])} · 박스 ${fmt(byCategory['박스'])} · 부자재 ${fmt(byCategory['부자재'])}</div>`;
   }
 
+  function toggleStockDetail(id){
+    const el = document.getElementById(id);
+    if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  }
+
   function renderStock(containerId, totalId, rows){
     const el = document.getElementById(containerId);
     const totalEl = document.getElementById(totalId);
@@ -503,13 +512,22 @@
     const max = Math.max(...rows.map(r => Number(r.current_stock)), 1);
     const totalValue = rows.reduce((a, r) => a + Number(r.stock_value || 0), 0);
     if(totalEl) totalEl.innerHTML = `이 카테고리 재고 비용 <b>${fmt(totalValue)}원</b>`;
-    el.innerHTML = rows.map(r => `
-      <div class="stock-row">
-        <span class="stock-name">${r.name}</span>
-        <div class="stock-bar-track"><div class="stock-bar-fill" style="width:${Math.max(0, Number(r.current_stock)/max*100).toFixed(1)}%"></div></div>
-        <span class="stock-amount">${fmt(r.current_stock)}${r.unit}</span>
-        <span class="stock-value">${fmt(r.stock_value)}원</span>
-      </div>`).join('');
+    el.innerHTML = rows.map((r, i) => {
+      const detailId = containerId + '_detail_' + i;
+      const adjPart = Number(r.total_adjustment) ? ` · 조정 ${fmt(r.total_adjustment)}${r.unit}` : '';
+      return `
+      <div class="stock-item">
+        <div class="stock-row" onclick="toggleStockDetail('${detailId}')">
+          <span class="stock-name">${r.name}</span>
+          <div class="stock-bar-track"><div class="stock-bar-fill" style="width:${Math.max(0, Number(r.current_stock)/max*100).toFixed(1)}%"></div></div>
+          <span class="stock-amount">${fmt(r.current_stock)}${r.unit}</span>
+          <span class="stock-value">${fmt(r.stock_value)}원</span>
+        </div>
+        <div class="stock-detail" id="${detailId}" style="display:none;">
+          누적 입고 <b>${fmt(r.total_in)}${r.unit}</b> − 출하 <b>${fmt(r.total_shipped)}${r.unit}</b> − 폐기 <b>${fmt(r.total_waste)}${r.unit}</b>${adjPart} = 현재 재고 <b>${fmt(r.current_stock)}${r.unit}</b>
+        </div>
+      </div>`;
+    }).join('');
   }
 
   function renderWasteTable(rows){

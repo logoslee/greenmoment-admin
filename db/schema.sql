@@ -162,6 +162,7 @@ create index if not exists stock_movements_batch_idx on stock_movements (batch_i
 
 -- 품목별 현재 재고 = 입고 - 출하 - 폐기 (+조정은 그대로 더함, 마이너스로 넣으면 차감됨)
 -- stock_value = 재고 수량 × 매입단가 (재고자산 금액)
+-- total_in/shipped/waste/adjustment = 전체 기간 입고·출하·폐기·조정 누적 수량 (품목 클릭 시 내역 보여주는 용도)
 drop view if exists v_stock_current;
 create view v_stock_current as
 select
@@ -181,7 +182,11 @@ select
     when sm.movement_type = '조정' then sm.quantity
     when sm.movement_type in ('출하', '폐기') then -sm.quantity
     else 0
-  end), 0) * i.cost_price as stock_value
+  end), 0) * i.cost_price as stock_value,
+  coalesce(sum(case when sm.movement_type = '입고' then sm.quantity else 0 end), 0) as total_in,
+  coalesce(sum(case when sm.movement_type = '출하' then sm.quantity else 0 end), 0) as total_shipped,
+  coalesce(sum(case when sm.movement_type = '폐기' then sm.quantity else 0 end), 0) as total_waste,
+  coalesce(sum(case when sm.movement_type = '조정' then sm.quantity else 0 end), 0) as total_adjustment
 from items i
 left join stock_movements sm on sm.item_id = i.id
 where i.active
